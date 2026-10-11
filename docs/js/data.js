@@ -84,7 +84,7 @@ export function parseHourly(raw) {
 export function getGpsPosition() {
   return new Promise((resolve, reject) => {
     if (!navigator.geolocation) {
-      reject(new Error("Dieses Gerät unterstützt keine Standortabfrage."));
+      reject(new Error("gpsUnsupported")); // Fehler-Schlüssel, den die Anzeige übersetzt
       return;
     }
     navigator.geolocation.getCurrentPosition(
@@ -92,29 +92,27 @@ export function getGpsPosition() {
         latitude: position.coords.latitude,
         longitude: position.coords.longitude,
       }),
-      (error) => reject(new Error(error.code === 1
-        ? "Standortzugriff wurde nicht erlaubt."
-        : "Standort konnte nicht ermittelt werden.")),
+      (error) => reject(new Error(error.code === 1 ? "gpsDenied" : "gpsFailed")),
       { enableHighAccuracy: false, timeout: REQUEST_TIMEOUT_MS, maximumAge: 10 * 60 * 1000 },
     );
   });
 }
 
-// Ortsname zu GPS-Koordinaten (für die Anzeige oben). Klappt das nicht, bleibt es bei "Mein Standort".
-export async function getPlaceName(latitude, longitude) {
+// Ortsname zu GPS-Koordinaten (für die Anzeige oben). Klappt das nicht, kommt null zurück.
+export async function getPlaceName(latitude, longitude, language) {
   try {
-    const parameters = new URLSearchParams({ latitude, longitude, localityLanguage: "de" });
+    const parameters = new URLSearchParams({ latitude, longitude, localityLanguage: language });
     const data = await getJson(`https://api.bigdatacloud.net/data/reverse-geocode-client?${parameters}`);
-    return data.city || data.locality || "Mein Standort";
+    return data.city || data.locality || null;
   } catch {
-    return "Mein Standort";
+    return null;
   }
 }
 
 // Ortssuche für den festen Standort (Open-Meteo Geocoding).
 // Wichtig: nur den Ortsnamen schicken, ohne ", Deutschland".
-export async function searchPlaces(name) {
-  const parameters = new URLSearchParams({ name, count: 5, language: "de", format: "json" });
+export async function searchPlaces(name, language) {
+  const parameters = new URLSearchParams({ name, count: 5, language, format: "json" });
   const data = await getJson(`https://geocoding-api.open-meteo.com/v1/search?${parameters}`);
   return (data.results || []).map((place) => ({
     name: place.name,

@@ -6,8 +6,9 @@
 import { fetchWeather, parseCurrent, parseHourly, getGpsPosition, getPlaceName, searchPlaces } from "./data.js";
 import {
   buildQuickCheck, getRidingTemperature, getFeelBand, getClothingLevel, pickFromWardrobe,
-  FEEL_BANDS, OUTFITS, CATALOG, ZONES, WARMTH_WORDS, RAIN_GEAR_ALL, GUSTS_STRONG,
+  FEEL_BANDS, OUTFITS, CATALOG, ZONES, RAIN_GEAR_ALL, GUSTS_STRONG,
 } from "./logic.js";
+import { t, itemName, setLanguage, guessLanguage, LANGUAGES } from "./i18n.js";
 
 // ---------------------------------------------------------------------
 // Einstellungen (im Speicher des Handys)
@@ -16,8 +17,13 @@ import {
 const STORAGE_KEY = "motoweather.settings.v1";
 const REFRESH_AFTER_MS = 10 * 60 * 1000; // nach 10 Minuten neu laden
 
+const RIDE_MIN = 1;
+const RIDE_MAX = 8;
+const RIDE_DEFAULT = 1;
+
 const DEFAULT_SETTINGS = {
   onboarded: false,
+  language: guessLanguage(),
   sensitivity: 3,
   wardrobe: [
     "Halstuch", "Winter-Sturmhaube",
@@ -56,7 +62,7 @@ const state = {
   settings: loadSettings(),
   view: "home",          // "home" oder "settings"
   draft: null,           // Kopie der Einstellungen, während man sie bearbeitet
-  rideHours: 2,
+  rideHours: RIDE_DEFAULT,
   showDetails: false,
   openZone: null,
   weather: null,         // { current, hours, placeName, fetchedAt }
@@ -65,14 +71,12 @@ const state = {
   search: { query: "", results: [], busy: false, error: null },
 };
 
+setLanguage(state.settings.language);
 const app = document.getElementById("app");
 
 // ---------------------------------------------------------------------
 // Hilfsfunktionen
 // ---------------------------------------------------------------------
-
-const WEEKDAYS = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
-const MONTHS = ["Jan", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"];
 
 function escapeHtml(text) {
   return String(text).replace(/[&<>"']/g, (c) => ({
@@ -89,12 +93,12 @@ function clock(date) {
 }
 
 function formatDate(date) {
-  return `${WEEKDAYS[date.getDay()]}, ${date.getDate()}. ${MONTHS[date.getMonth()]} · ${clock(date)}`;
+  return t("dateFormat", t("weekdays")[date.getDay()], date.getDate(), t("months")[date.getMonth()], clock(date));
 }
 
 function formatHours(hours) {
-  if (hours === 0.5) return "30 min";
-  return `${String(hours).replace(".", ",")} h`;
+  const text = state.settings.language === "de" ? String(hours).replace(".", ",") : String(hours);
+  return `${text} h`;
 }
 
 // ---------------------------------------------------------------------
@@ -111,6 +115,7 @@ const ICONS = {
   chevronDown: '<path d="M6 9l6 6 6-6"></path>',
   chevronLeft: '<path d="M15 6l-6 6 6 6"></path>',
   thermometer: '<path d="M14 14.8V4.5a2 2 0 0 0-4 0v10.3a4 4 0 1 0 4 0z"></path>',
+  globe: '<circle cx="12" cy="12" r="9"></circle><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"></path>',
   head: '<circle cx="12" cy="9" r="5.5"></circle><path d="M7 21v-2.5a5 5 0 0 1 10 0V21"></path>',
   torso: '<path d="M8.5 3.5L4 5.5 2.5 11l3.2 1.2L7 10v10.5h10V10l1.3 2.2 3.2-1.2L20 5.5l-4.5-2a4 4 0 0 1-7 0z"></path>',
   hands: '<path d="M7.5 21v-4.5L5 12.5a1.6 1.6 0 0 1 2.6-1.8L9 12.5V5.5a1.5 1.5 0 0 1 3 0V11V4a1.5 1.5 0 0 1 3 0v7V5.5a1.5 1.5 0 0 1 3 0V15a6 6 0 0 1-1.5 4V21"></path>',
@@ -129,7 +134,7 @@ function icon(name, size = 20, color = "currentColor", width = 1.8) {
 async function getLocation() {
   if (state.settings.useGps) {
     const position = await getGpsPosition();
-    const placeName = await getPlaceName(position.latitude, position.longitude);
+    const placeName = await getPlaceName(position.latitude, position.longitude, state.settings.language);
     return { ...position, placeName };
   }
   const place = state.settings.manualPlace;
@@ -151,7 +156,8 @@ async function loadWeather() {
       fetchedAt: new Date(),
     };
   } catch (error) {
-    state.error = error.message || "Wetter konnte nicht geladen werden.";
+    const known = ["gpsUnsupported", "gpsDenied", "gpsFailed"];
+    state.error = known.includes(error.message) ? t(error.message) : t("loadError");
   } finally {
     state.loading = false;
     render();
@@ -170,33 +176,34 @@ function currentCheck() {
 
 function renderHome() {
   const weather = state.weather;
-  const placeName = weather ? weather.placeName : (state.settings.useGps ? "Mein Standort" : state.settings.manualPlace.name);
+  let placeName;
+  if (weather) placeName = weather.placeName || t("myLocation");
+  else placeName = state.settings.useGps ? t("myLocation") : state.settings.manualPlace.name;
 
-  let body;
+  let body = "";
   if (state.loading && !weather) {
-    body = `<section class="card status-card"><div class="spinner" aria-hidden="true"></div><p>Wetter wird geladen …</p></section>`;
+    body = `<section class="card status-card"><div class="spinner" aria-hidden="true"></div><p>${t("loading")}</p></section>`;
   } else if (state.error && !weather) {
     body = `<section class="card status-card">
       <p>${escapeHtml(state.error)}</p>
-      <button class="secondary-button" data-action="retry">Nochmal versuchen</button>
-      <button class="secondary-button" data-action="open-settings">Standort einstellen</button>
+      <button class="secondary-button" data-action="retry">${t("retry")}</button>
+      <button class="secondary-button" data-action="open-settings">${t("setLocation")}</button>
     </section>`;
   } else if (weather) {
-    const check = currentCheck();
-    body = renderHero(check) + renderRideShell() + `<section class="card" id="outfit"></section>`;
-  } else {
-    body = "";
+    body = renderHero(currentCheck()) + renderRideShell() + `<section class="card" id="outfit"></section>`;
   }
 
-  const updated = weather ? `Aktualisiert ${clock(weather.fetchedAt)}` : "";
+  const updated = weather
+    ? ` · <button class="text-button" data-action="retry">${t("updated", clock(weather.fetchedAt))}</button>`
+    : "";
 
   app.innerHTML = `<div class="app">
     <header class="topbar">
       <div class="place">
         <div class="place-name">${icon("pin", 18, "var(--brand)", 2)}<span>${escapeHtml(placeName)}</span></div>
-        <div class="place-date">${formatDate(new Date())}${updated ? ` · <button class="link-like" data-action="retry" style="background:none;border:0;padding:0;color:var(--muted);font-size:14px;text-decoration:underline">${updated}</button>` : ""}</div>
+        <div class="place-date">${formatDate(new Date())}${updated}</div>
       </div>
-      <button class="icon-button" data-action="open-settings" aria-label="Einstellungen">${icon("sliders")}</button>
+      <button class="icon-button" data-action="open-settings" aria-label="${t("settings")}">${icon("sliders")}</button>
     </header>
     ${body}
   </div>`;
@@ -207,7 +214,7 @@ function renderHome() {
 function renderGauge(ridingTemperature, bandIndex) {
   const tMin = -10;
   const tMax = 35;
-  const angle = (t) => Math.PI * (1 - (Math.max(tMin, Math.min(tMax, t)) - tMin) / (tMax - tMin));
+  const angle = (temp) => Math.PI * (1 - (Math.max(tMin, Math.min(tMax, temp)) - tMin) / (tMax - tMin));
   const point = (a, r) => [75 + r * Math.cos(a), 80 - r * Math.sin(a)];
   const f = (n) => Math.round(n * 10) / 10;
   const bounds = [-10, 5, 12, 18, 25, 30, 35];
@@ -222,7 +229,7 @@ function renderGauge(ridingTemperature, bandIndex) {
   });
   const [nx, ny] = point(angle(ridingTemperature), 48);
 
-  return `<svg role="img" aria-label="Temperaturanzeige von sehr kalt bis heiß, Zeiger auf ${FEEL_BANDS[bandIndex].label}" width="156" height="92" viewBox="0 0 150 90">
+  return `<svg role="img" aria-label="${t("gaugeLabel", t("bands")[bandIndex])}" width="156" height="92" viewBox="0 0 150 90">
     ${arcs}
     <line x1="75" y1="80" x2="${f(nx)}" y2="${f(ny)}" stroke="#F4F1EA" stroke-width="3.5" stroke-linecap="round"></line>
     <circle cx="75" cy="80" r="6" fill="#F4F1EA"></circle>
@@ -234,29 +241,42 @@ const HERO_COLORS = [
   ["#17221A", "#34502C"], ["#262013", "#5A4A1F"], ["#28180F", "#5E3220"],
 ];
 
+// Hintergrund der Jetzt-Kachel: Bergkette, davor Hügel - plus je nach Wetter Straße, Schnee, Regen oder Sonne
 function renderScene(kind) {
-  const box = 'class="scene" aria-hidden="true" viewBox="0 0 358 270" preserveAspectRatio="xMidYMid slice"';
+  const color = kind === "frost" ? "#CFE3FF" : (kind === "rain" ? "#6EC3F5" : "var(--accent)");
+
+  const backRange = "M0 150 L28 128 L52 140 L92 92 L118 112 L160 58 L190 96 L214 80 L246 118 L284 70 L318 102 L340 88 L358 98";
+  const frontRange = "M0 196 L46 168 L80 182 L128 140 L166 170 L206 150 L250 178 L296 146 L334 172 L358 160";
+  const snowCaps = "M150 72 L160 58 L171 74 M82 104 L92 92 L102 103 M274 82 L284 70 L295 84";
+  const close = " L358 270 L0 270 Z";
+
+  let extra = "";
   if (kind === "frost") {
     const flake = "M0 -11V11M-9.5 -5.5L9.5 5.5M-9.5 5.5L9.5 -5.5";
-    const spots = [[300, 44, 1], [246, 116, 0.7], [334, 140, 1.3], [200, 30, 0.6], [336, 236, 0.8], [186, 224, 0.55], [280, 204, 1]];
-    return `<svg ${box}><g fill="none" stroke="#CFE3FF" stroke-width="1.6" opacity="0.24" stroke-linecap="round">
-      ${spots.map(([x, y, s]) => `<path transform="translate(${x} ${y}) scale(${s})" d="${flake}"></path>`).join("")}
-      <path d="M0 252 Q60 240 120 250 T240 246 T358 252"></path></g></svg>`;
+    const spots = [[300, 34, 1], [236, 30, 0.6], [334, 130, 1.1], [200, 120, 0.7], [320, 226, 0.8], [180, 220, 0.55], [270, 200, 0.9]];
+    extra = spots.map(([x, y, s]) => `<path transform="translate(${x} ${y}) scale(${s})" d="${flake}" stroke="#CFE3FF" stroke-width="1.6" opacity="0.35"></path>`).join("");
+  } else if (kind === "rain") {
+    extra = `<path d="M200 20l-8 18M240 40l-8 18M280 16l-8 18M320 46l-8 18M220 90l-8 18M262 110l-8 18M304 84l-8 18M346 112l-8 18M190 160l-8 18M236 180l-8 18M282 156l-8 18M328 190l-8 18" stroke="#6EC3F5" stroke-width="2" opacity="0.35"></path>`;
+  } else if (kind === "sun") {
+    extra = `<circle cx="214" cy="40" r="18" stroke="${color}" stroke-width="2" opacity="0.35"></circle>
+      <path d="M214 12v-8M214 68v8M186 40h-8M242 40h8M194 20l-6-6M234 60l6 6M234 20l6-6M194 60l-6 6" stroke="${color}" stroke-width="2" opacity="0.35"></path>`;
   }
-  if (kind === "rain") {
-    return `<svg ${box}><g stroke="#6EC3F5" stroke-width="2" opacity="0.2" stroke-linecap="round">
-      <path d="M200 20l-8 18M240 40l-8 18M280 16l-8 18M320 46l-8 18M220 90l-8 18M262 110l-8 18M304 84l-8 18M346 112l-8 18M190 160l-8 18M236 180l-8 18M282 156l-8 18M328 190l-8 18M260 226l-8 18M314 240l-8 18"></path></g></svg>`;
-  }
-  if (kind === "sun") {
-    return `<svg ${box}><g fill="none" stroke="var(--accent)" stroke-width="2" opacity="0.2" stroke-linecap="round">
-      <circle cx="300" cy="150" r="26"></circle><path d="M300 108v-12M300 192v12M258 150h-12M342 150h12M270 120l-8-8M330 180l8 8M330 120l8-8M270 180l-8 8"></path>
-      <path d="M0 230 Q90 190 180 215 T358 200"></path></g></svg>`;
-  }
-  // Standard: Landstraße in die Hügel
-  return `<svg ${box}><g fill="none" stroke="var(--accent)" stroke-width="2" opacity="0.2" stroke-linecap="round">
-    <path d="M0 205 Q70 160 150 190 T358 168"></path><path d="M0 232 Q110 196 220 214 T358 200"></path>
-    <path d="M200 270 L303 178"></path><path d="M358 250 L309 178"></path>
-    <path d="M282 270 L306 178" stroke-dasharray="12 10"></path></g></svg>`;
+
+  // Straße, die zwischen den Bergen verschwindet
+  const road = kind === "frost" ? "" : `<g stroke="${color}" stroke-width="2" opacity="0.32">
+    <path d="M196 270 L292 176"></path><path d="M358 252 L300 176"></path>
+    <path d="M276 270 L296 178" stroke-dasharray="12 10"></path></g>`;
+
+  return `<svg class="scene" aria-hidden="true" viewBox="0 0 358 270" preserveAspectRatio="xMidYMid slice">
+    <g fill="none" stroke-linecap="round" stroke-linejoin="round" transform="translate(0 22)">
+      <path d="${backRange}${close}" fill="${color}" opacity="0.06"></path>
+      <path d="${backRange}" stroke="${color}" stroke-width="2" opacity="0.28"></path>
+      <path d="${snowCaps}" stroke="${color}" stroke-width="2" opacity="0.45"></path>
+      <path d="${frontRange}${close}" fill="${color}" opacity="0.08"></path>
+      <path d="${frontRange}" stroke="${color}" stroke-width="2" opacity="0.32"></path>
+      ${road}${extra}
+    </g>
+  </svg>`;
 }
 
 function renderHero(check) {
@@ -271,44 +291,57 @@ function renderHero(check) {
   else if (now.ridingTemperature >= 25) scene = "sun";
 
   const ice = now.ice ? `<div class="ice-banner">${icon("warning", 24, "#1A1408", 2)}
-    <div><strong>Glättegefahr</strong><span>${now.iceUntil ? `Bis ca. ${now.iceUntil.getHours()} Uhr` : "Jetzt"} – Boden um 0 °C, Brücken und Schattenlagen</span></div></div>` : "";
+    <div><strong>${t("iceTitle")}</strong><span>${now.iceUntil ? t("iceUntil", t("atHour", now.iceUntil.getHours())) : t("iceNow")} – ${t("iceText")}</span></div></div>` : "";
 
   return `<section class="hero" style="background:${bg};border-color:${border}">
     ${renderScene(scene)}
     <div class="hero-top">
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-        <span class="now-badge">JETZT</span><span class="hero-caption">gefühlt auf dem Motorrad</span>
+        <span class="now-badge"><span class="live-dot" aria-hidden="true"></span>${t("now")}</span><span class="hero-caption">${t("feltOnBike")}</span>
       </div>
-      <div class="air-badge"><small>AUSSEN</small><strong>${deg(now.airTemperature)}°</strong></div>
+      <div class="air-badge"><small>${t("outside")}</small><strong>${deg(now.airTemperature)}°</strong></div>
     </div>
     <div class="hero-main">
       <div class="big-temp">${deg(now.ridingTemperature)}°</div>
-      <div class="gauge-wrap">${renderGauge(now.ridingTemperature, bandIndex)}<div class="feel-label">${now.band.label}</div></div>
+      <div class="gauge-wrap">${renderGauge(now.ridingTemperature, bandIndex)}<div class="feel-label">${t("bands")[bandIndex]}</div></div>
     </div>
     ${ice}
   </section>`;
 }
 
-const SLIDER_STEPS = [0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6, 6.5, 7, 7.5, 8];
-const SLIDER_LABELS = [[0.5, "30 min"], [2, "2 h"], [4, "4 h"], [6, "6 h"], [8, "8 h"]];
+const SLIDER_STEPS = [];
+for (let v = RIDE_MIN; v <= RIDE_MAX; v += 0.5) SLIDER_STEPS.push(v);
+const SLIDER_LABELS = [1, 2, 4, 6, 8];
 
 function renderRideShell() {
+  const position = (v) => ((v - RIDE_MIN) / (RIDE_MAX - RIDE_MIN)) * 100;
   return `<section class="card ride">
     <div class="ride-head">
       <div style="display:flex;flex-direction:column;gap:3px">
-        <div class="eyebrow">${icon("route", 16, "currentColor", 2)}Deine Fahrt</div>
-        <label for="ride-hours" class="ride-question">Wie lange fährst du?</label>
+        <div class="eyebrow">${icon("route", 16, "currentColor", 2)}${t("yourRide")}</div>
+        <label for="ride-hours" class="ride-question">${t("howLong")}</label>
       </div>
       <div class="ride-value"><strong id="hours-text"></strong><span class="muted" id="end-text"></span></div>
     </div>
-    <input id="ride-hours" type="range" min="0.5" max="8" step="0.5" value="${state.rideHours}">
+    <input id="ride-hours" type="range" min="${RIDE_MIN}" max="${RIDE_MAX}" step="0.5" value="${state.rideHours}">
     <div class="ticks" aria-hidden="true">${SLIDER_STEPS.map((v) => `<span data-v="${v}" class="${v % 1 === 0 ? "full" : ""}"></span>`).join("")}</div>
-    <div class="tick-labels" aria-hidden="true">${SLIDER_LABELS.map(([v, text]) => `<span data-v="${v}" style="left:${((v - 0.5) / 7.5) * 100}%">${text}</span>`).join("")}</div>
+    <div class="tick-labels" aria-hidden="true">${SLIDER_LABELS.map((v) => `<span data-v="${v}" style="left:${position(v)}%">${v} h</span>`).join("")}</div>
     <div id="ride-dynamic"></div>
     <button class="details-toggle" data-action="toggle-details" aria-expanded="${state.showDetails}">
-      <span>${state.showDetails ? "Weniger anzeigen" : "Regen & Wind im Verlauf"}</span>${icon("chevronDown", 16, "currentColor", 2.2)}
+      <span>${state.showDetails ? t("hideDetails") : t("showDetails")}</span>${icon("chevronDown", 16, "currentColor", 2.2)}
     </button>
   </section>`;
+}
+
+function rainText(rain) {
+  if (rain.kind === "now") return [t("rainNow"), t("rainNowSub")];
+  if (rain.kind === "from") return [t("rainFrom", t("atHour", rain.hour)), t("rainFromSub", rain.probability)];
+  return [t("rainPossible"), t("rainPossibleSub", rain.probability)];
+}
+
+function windText(wind) {
+  const title = wind.kind === "now" ? t("windNow") : t("windFrom", t("atHour", wind.hour));
+  return [title, t("windSub", wind.maxGusts)];
 }
 
 // Alles, was vom Regler abhängt - wird beim Ziehen neu gezeichnet, ohne den Regler selbst anzufassen
@@ -317,7 +350,7 @@ function updateRide() {
   const ride = check.ride;
 
   document.getElementById("hours-text").textContent = formatHours(state.rideHours);
-  document.getElementById("end-text").textContent = `bis ${clock(ride.end)}`;
+  document.getElementById("end-text").textContent = t("until", clock(ride.end));
   document.getElementById("ride-hours").setAttribute("aria-valuetext", formatHours(state.rideHours));
   app.querySelectorAll(".ticks span, .tick-labels span").forEach((el) => {
     el.classList.toggle("on", Number(el.dataset.v) <= state.rideHours);
@@ -326,17 +359,19 @@ function updateRide() {
   // Hinweise
   const hints = [];
   if (ride.iceLater) {
-    hints.push(`<div class="hint ice">${icon("warning", 22, "var(--ice)", 2)}<strong>Glättegefahr ab ca. ${ride.iceLater.getHours()} Uhr</strong></div>`);
+    hints.push(`<div class="hint ice">${icon("warning", 22, "var(--ice)", 2)}<strong>${t("iceFrom", t("atHour", ride.iceLater.getHours()))}</strong></div>`);
   }
   if (ride.rain) {
-    hints.push(`<div class="hint rain">${icon("drop", 22, "var(--rain)")}<div><strong>${ride.rain.title}</strong><span>${ride.rain.sub}</span></div></div>`);
+    const [title, sub] = rainText(ride.rain);
+    hints.push(`<div class="hint rain">${icon("drop", 22, "var(--rain)")}<div><strong>${title}</strong><span>${sub}</span></div></div>`);
   }
   if (ride.wind) {
+    const [title, sub] = windText(ride.wind);
     const bars = [1, 2, 3].map((i) => `<i class="${i <= ride.windLevel ? "on" : ""}" style="height:${5 + i * 4}px"></i>`).join("");
-    hints.push(`<div class="hint wind"><span class="wind-bars" aria-hidden="true">${bars}</span><div><strong>${ride.wind.title}</strong><span>${ride.wind.sub}</span></div></div>`);
+    hints.push(`<div class="hint wind"><span class="wind-bars" aria-hidden="true">${bars}</span><div><strong>${title}</strong><span>${sub}</span></div></div>`);
   }
   if (!hints.length) {
-    hints.push(`<div class="calm">${icon("check", 18, "#9FDB6B", 2)}<span>Bis ${clock(ride.end)}: trocken · ${ride.windLevel === 1 ? "kaum Wind" : "etwas Wind"}</span></div>`);
+    hints.push(`<div class="calm">${icon("check", 18, "#9FDB6B", 2)}<span>${t("calm", clock(ride.end), ride.windLevel > 1)}</span></div>`);
   }
 
   // Verlauf
@@ -357,8 +392,8 @@ function updateRide() {
     const rainRow = cells((p) => `<div class="rain-bar"><i style="height:${Math.round(p.rainProbability / 100 * 28)}px"></i></div>
       <div class="rain-value ${p.rainProbability >= 30 ? "high" : ""}">${p.rainProbability}</div>`);
     const gustRow = cells((p) => `<div class="gust ${p.gusts >= GUSTS_STRONG ? "strong" : ""}">${Math.round(p.gusts)}</div>`);
-    details = `<div class="row-title" style="color:var(--rain)">Regen %</div><div class="timeline-row">${rainRow}</div>
-      <div class="row-title" style="color:var(--wind)">Böen km/h</div><div class="timeline-row">${gustRow}</div>`;
+    details = `<div class="row-title" style="color:var(--rain)">${t("rainRow")}</div><div class="timeline-row">${rainRow}</div>
+      <div class="row-title" style="color:var(--wind)">${t("gustRow")}</div><div class="timeline-row">${gustRow}</div>`;
   }
 
   document.getElementById("ride-dynamic").innerHTML = `<div class="hints">${hints.join("")}</div>
@@ -370,60 +405,72 @@ function updateRide() {
 function renderOutfit(check) {
   const outfit = check.outfit;
   const ride = check.ride;
-  const warmthClass = (w) => `w${w}`;
+  const warmth = t("warmth");
 
   const tiles = outfit.zones.map((zone) => {
     const layers = zone.layers;
-    const open = state.openZone === zone.key && layers.length > 1;
+    const canOpen = layers.length > 0;
+    const open = canOpen && state.openZone === zone.key;
     const outer = layers[layers.length - 1];
-    const strip = (layers.length ? layers : [null]).map((l) => `<i class="${l ? warmthClass(l.warmth) : ""}"></i>`).join("");
+    const strip = (layers.length ? layers : [null]).map((l) => `<i class="${l ? `w${l.warmth}` : ""}"></i>`).join("");
 
     let meta = "";
     if (layers.length > 1) {
       const n = layers.length - 1;
-      meta = `<span class="more-badge">+${n}</span><span>${n === 1 ? "Schicht" : "Schichten"} darunter</span>`;
+      meta = `<span class="more-badge">+${n}</span><span>${t("layersBelow", n)}</span>`;
     } else if (layers.length === 1) {
-      meta = `<span class="muted">${outer.missing ? "nicht im Kleiderschrank" : WARMTH_WORDS[outer.warmth]}</span>`;
+      meta = `<span class="muted">${outer.missing ? t("notOwned") : warmth[outer.warmth]}</span>`;
     }
 
-    return `<button class="tile" data-action="toggle-zone" data-zone="${zone.key}" aria-expanded="${open}">
-      <span class="tile-zone">${icon(zone.key, 22, "#C3C7CD")}${zone.name}</span>
-      <span class="tile-item ${layers.length ? "" : "empty"}">${outer ? escapeHtml(outer.name) : "Nichts extra"}</span>
+    const inner = `<span class="tile-zone">${icon(zone.key, 22, "#C3C7CD")}${t("zones")[zone.key]}</span>
+      <span class="tile-item ${layers.length ? "" : "empty"}">${outer ? escapeHtml(itemName(outer.name)) : t("nothingExtra")}</span>
       <span class="tile-meta">${meta}</span>
-      <span class="strip">${strip}</span>
-    </button>`;
+      <span class="strip">${strip}</span>`;
+
+    return canOpen
+      ? `<button class="tile" data-action="toggle-zone" data-zone="${zone.key}" aria-expanded="${open}">${inner}</button>`
+      : `<div class="tile">${inner}</div>`;
   });
 
   // Regen-Kachel
   const gear = outfit.rainGear;
+  let gearMeta = t("dryRide");
+  if (gear) {
+    if (gear.missing) gearMeta = t("notOwned");
+    else gearMeta = ride.rainSoonestHour !== null ? t("rainAt", t("atHour", ride.rainSoonestHour)) : t("takeAlong");
+  }
   tiles.push(`<div class="tile ${gear ? "rain-on" : ""}">
-    <span class="tile-zone">${icon("drop", 22, gear ? "var(--rain)" : "#6E747D")}Regen</span>
-    <span class="tile-item ${gear ? "" : "empty"}">${gear ? escapeHtml(gear.name) : "Nicht nötig"}</span>
-    <span class="tile-meta"><span class="muted">${gear ? (gear.missing ? "nicht im Kleiderschrank" : (ride.rainSoonestHour !== null ? `Regen ab ${ride.rainSoonestHour} Uhr` : "mitnehmen")) : "trocken unterwegs"}</span></span>
+    <span class="tile-zone">${icon("drop", 22, gear ? "var(--rain)" : "#6E747D")}${t("zones").rain}</span>
+    <span class="tile-item ${gear ? "" : "empty"}">${gear ? escapeHtml(itemName(gear.name)) : t("notNeeded")}</span>
+    <span class="tile-meta"><span class="muted">${gearMeta}</span></span>
     <span class="strip"><i class="${gear ? "w0" : ""}"></i></span>
   </div>`);
 
+  // Aufgeklappte Zone - auch wenn sie nur ein Teil hat
   let detail = "";
-  const openZone = outfit.zones.find((z) => z.key === state.openZone && z.layers.length > 1);
+  const openZone = outfit.zones.find((z) => z.key === state.openZone && z.layers.length > 0);
   if (openZone) {
     const rows = [...openZone.layers].reverse().map((l) => `<div class="layer">
-      <span class="swatch ${warmthClass(l.warmth)}"></span>
-      <span class="name">${escapeHtml(l.name)}</span>
-      <span class="word ${warmthClass(l.warmth)}">${WARMTH_WORDS[l.warmth]}</span></div>`).join("");
-    detail = `<div class="layer-detail"><div class="label-small">${openZone.name} · von außen nach innen</div>${rows}</div>`;
+      <span class="swatch w${l.warmth}"></span>
+      <span class="name">${escapeHtml(itemName(l.name))}${l.missing ? ` <small class="muted">(${t("notOwned")})</small>` : ""}</span>
+      <span class="word w${l.warmth}">${warmth[l.warmth]}</span></div>`).join("");
+    const heading = openZone.layers.length > 1 ? `${t("zones")[openZone.key]} · ${t("outsideIn")}` : t("zones")[openZone.key];
+    detail = `<div class="layer-detail"><div class="label-small">${heading}</div>${rows}</div>`;
   }
+
+  const tip = outfit.tip === "colder" ? t("tipColder") : (outfit.tip === "warmer" ? t("tipWarmer") : null);
 
   document.getElementById("outfit").innerHTML = `
     <div class="outfit-head">
-      <div class="eyebrow">${icon("torso", 16, "currentColor", 2)}Anziehen</div>
-      <div class="hint-text">für ${deg(ride.coldest)}° im kältesten Moment</div>
+      <div class="eyebrow">${icon("torso", 16, "currentColor", 2)}${t("dress")}</div>
+      <div class="hint-text">${t("forColdest", deg(ride.coldest))}</div>
     </div>
     <div class="tiles">${tiles.join("")}</div>
     ${detail}
     <div class="legend">
-      <span><i class="w1"></i>leicht</span><span><i class="w2"></i>warm</span><span><i class="w3"></i>winterfest</span>
+      <span><i class="w1"></i>${warmth[1]}</span><span><i class="w2"></i>${warmth[2]}</span><span><i class="w3"></i>${warmth[3]}</span>
     </div>
-    ${outfit.tip ? `<div class="tip">${outfit.tip}</div>` : ""}`;
+    ${tip ? `<div class="tip">${tip}</div>` : ""}`;
 }
 
 // ---------------------------------------------------------------------
@@ -431,21 +478,13 @@ function renderOutfit(check) {
 // ---------------------------------------------------------------------
 
 const LEVEL_COLORS = ["#8FB8FF", "#62C1F5", "#9FDB6B", "#FFC94A", "#FF7A45"];
-const LEVEL_INFO = [
-  ["Fröstelt schnell", "Du frierst früh. Wir empfehlen dir deutlich wärmere Kleidung, meist eine Schicht mehr."],
-  ["Eher verfroren", "Du magst es lieber etwas wärmer. Wir empfehlen dir etwas wärmere Kleidung."],
-  ["Normal", "Wir empfehlen Kleidung, die für die meisten Fahrer passt."],
-  ["Robust", "Kälte macht dir wenig aus. Wir empfehlen dir etwas leichtere Kleidung."],
-  ["Friert nie", "Kälte? Welche Kälte? Wir empfehlen dir deutlich leichtere Kleidung, meist eine Schicht weniger."],
-];
 
 const WARDROBE_GROUPS = [
   ...ZONES.map((zone) => ({
     key: zone.key,
-    name: zone.name,
     items: Object.entries(CATALOG).filter(([, info]) => info[0] === zone.key).map(([name, info]) => ({ name, warmth: info[2] })),
   })),
-  { key: "rain", name: "Regen", items: RAIN_GEAR_ALL.map((name) => ({ name, warmth: 0 })) },
+  { key: "rain", items: RAIN_GEAR_ALL.map((name) => ({ name, warmth: 0 })) },
 ];
 
 function openSettings() {
@@ -454,6 +493,13 @@ function openSettings() {
   state.view = "settings";
   render();
   window.scrollTo(0, 0);
+}
+
+function closeSettings() {
+  setLanguage(state.settings.language); // ungespeicherte Sprachwahl verwerfen
+  state.view = "home";
+  state.draft = null;
+  render();
 }
 
 function renderExample(draft) {
@@ -468,48 +514,51 @@ function renderExample(draft) {
     const picked = pickFromWardrobe(item, wardrobe);
     if (picked && !items.some((i) => i.name === picked.name)) items.push({ name: picked.name, warmth: CATALOG[picked.name][2] });
   }
-  const chips = items.map((it, i) => `${i ? '<span class="muted" aria-hidden="true">+</span>' : ""}<span class="chip-static"><span class="dot w${it.warmth}"></span>${escapeHtml(it.name)}</span>`).join("");
+  const chips = items.map((it, i) => `${i ? '<span class="muted" aria-hidden="true">+</span>' : ""}<span class="chip-static"><span class="dot w${it.warmth}"></span>${escapeHtml(itemName(it.name))}</span>`).join("");
 
   const stuck = (draft.sensitivity > 3 && level === 1 && baseLevel === 1) || (draft.sensitivity < 3 && level === 5 && baseLevel === 5);
-  const note = stuck ? `<span class="hint-text">Bei dieser Temperatur macht die Einstellung keinen Unterschied – das zeigt sich an anderen Tagen.</span>` : "";
 
   return `<div class="example">
-    <span class="hint-text">Beispiel: Bei ${deg(riding)}° auf dem Motorrad empfehlen wir dir oben herum</span>
-    <div class="chips">${chips}</div>${note}</div>`;
+    <span class="hint-text">${t("example", deg(riding))}</span>
+    <div class="chips">${chips}</div>
+    ${stuck ? `<span class="hint-text">${t("noDifference")}</span>` : ""}</div>`;
 }
 
 function renderSettings() {
   const draft = state.draft;
   const onboarding = !state.settings.onboarded;
   const levelColor = LEVEL_COLORS[draft.sensitivity - 1];
-  const [levelTitle, levelText] = LEVEL_INFO[draft.sensitivity - 1];
+  const [levelTitle, levelText] = t("levels")[draft.sensitivity - 1];
   const wardrobe = new Set(draft.wardrobe);
+  const warmth = t("warmth");
+
+  const languages = LANGUAGES.map((lang) => `<button class="segment" data-action="set-language" data-language="${lang.code}" aria-pressed="${draft.language === lang.code}">${lang.name}</button>`).join("");
 
   const levels = [1, 2, 3, 4, 5].map((n) => {
     const on = n === draft.sensitivity;
     const color = LEVEL_COLORS[n - 1];
-    return `<button class="level" data-action="set-level" data-level="${n}" aria-pressed="${on}" aria-label="Stufe ${n}: ${LEVEL_INFO[n - 1][0]}"
+    return `<button class="level" data-action="set-level" data-level="${n}" aria-pressed="${on}" aria-label="${t("level", n, t("levels")[n - 1][0])}"
       style="${on ? `background:${color};border-color:${color}` : `color:${color}`}">${n}</button>`;
   }).join("");
 
   const groups = WARDROBE_GROUPS.map((group) => {
     const count = group.items.filter((it) => wardrobe.has(it.name)).length;
     const chips = group.items.map((it) => `<button class="chip" data-action="toggle-item" data-item="${escapeHtml(it.name)}" aria-pressed="${wardrobe.has(it.name)}">
-      <span class="dot w${it.warmth}"></span>${escapeHtml(it.name)}${wardrobe.has(it.name) ? icon("check", 14, "#F4F1EA", 3) : ""}</button>`).join("");
+      <span class="dot w${it.warmth}"></span>${escapeHtml(itemName(it.name))}${wardrobe.has(it.name) ? icon("check", 14, "#F4F1EA", 3) : ""}</button>`).join("");
     const groupIcon = group.key === "rain" ? icon("drop", 20, "var(--rain)") : icon(group.key, 20, "#C3C7CD");
     return `<div class="category">
-      <div class="category-head"><span class="category-name">${groupIcon}${group.name}</span><span class="hint-text">${count} von ${group.items.length}</span></div>
+      <div class="category-head"><span class="category-name">${groupIcon}${t("zones")[group.key]}</span><span class="hint-text">${t("countOf", count, group.items.length)}</span></div>
       <div class="chips">${chips}</div></div>`;
   }).join("");
 
   const search = state.search;
   const manualBlock = draft.useGps ? "" : `
     <div style="display:flex;flex-direction:column;gap:8px">
-      <div class="hint-text">Aktuell: <strong style="color:var(--text)">${escapeHtml(draft.manualPlace.name)}</strong>${draft.manualPlace.region ? ` · ${escapeHtml(draft.manualPlace.region)}` : ""}</div>
+      <div class="hint-text">${t("current")}: <strong style="color:var(--text)">${escapeHtml(draft.manualPlace.name)}</strong>${draft.manualPlace.region ? ` · ${escapeHtml(draft.manualPlace.region)}` : ""}</div>
       <form class="search" data-action="search">
-        <label for="place-search" class="visually-hidden">Ort suchen</label>
-        <input id="place-search" class="text-input" type="search" placeholder="Ort suchen, z. B. Kassel" value="${escapeHtml(search.query)}" autocomplete="off">
-        <button class="secondary-button" type="submit">${search.busy ? "…" : "Suchen"}</button>
+        <label for="place-search" class="visually-hidden">${t("searchPlace")}</label>
+        <input id="place-search" class="text-input" type="search" placeholder="${t("searchPlaceholder")}" value="${escapeHtml(search.query)}" autocomplete="off">
+        <button class="secondary-button" type="submit">${search.busy ? "…" : t("search")}</button>
       </form>
       ${search.error ? `<div class="hint-text">${escapeHtml(search.error)}</div>` : ""}
       <div class="results">${search.results.map((place, i) => `<button class="result" data-action="pick-place" data-index="${i}" aria-pressed="${place.latitude === draft.manualPlace.latitude && place.longitude === draft.manualPlace.longitude}">
@@ -518,26 +567,31 @@ function renderSettings() {
 
   app.innerHTML = `<div class="app">
     <header class="page-head">
-      ${onboarding ? "" : `<button class="icon-button" data-action="close-settings" aria-label="Zurück">${icon("chevronLeft", 20, "currentColor", 2.2)}</button>`}
-      <div><div class="page-title">${onboarding ? "Willkommen" : "Einstellungen"}</div>
-      <div class="hint-text">${onboarding ? "Kurz einrichten, damit die Empfehlungen zu dir passen" : "Damit die Empfehlungen zu dir passen"}</div></div>
+      ${onboarding ? "" : `<button class="icon-button" data-action="close-settings" aria-label="${t("back")}">${icon("chevronLeft", 20, "currentColor", 2.2)}</button>`}
+      <div><div class="page-title">${onboarding ? t("welcome") : t("settings")}</div>
+      <div class="hint-text">${onboarding ? t("setupHint") : t("settingsHint")}</div></div>
     </header>
 
     <section class="card">
-      <div class="eyebrow">${icon("pin", 16, "currentColor", 2)}Standort</div>
+      <div class="eyebrow">${icon("globe", 16, "currentColor", 2)}${t("language")}</div>
+      <div class="segments">${languages}</div>
+    </section>
+
+    <section class="card">
+      <div class="eyebrow">${icon("pin", 16, "currentColor", 2)}${t("location")}</div>
       <div class="switch-row">
-        <div><div class="question">Automatisch per GPS</div>
-        <div class="hint-text">${draft.useGps ? "Beim Öffnen wird dein Standort abgefragt" : "Aus – fester Ort wird genutzt"}</div></div>
-        <button class="switch" data-action="toggle-gps" aria-pressed="${draft.useGps}" aria-label="Standort automatisch per GPS"></button>
+        <div><div class="question">${t("gps")}</div>
+        <div class="hint-text">${draft.useGps ? t("gpsOn") : t("gpsOff")}</div></div>
+        <button class="switch" data-action="toggle-gps" aria-pressed="${draft.useGps}" aria-label="${t("gps")}"></button>
       </div>
       ${manualBlock}
     </section>
 
     <section class="card">
-      <div class="eyebrow">${icon("thermometer", 16, "currentColor", 2)}Kälteempfinden</div>
-      <div class="question">Wie schnell frierst du auf dem Motorrad?</div>
+      <div class="eyebrow">${icon("thermometer", 16, "currentColor", 2)}${t("coldFeeling")}</div>
+      <div class="question">${t("coldQuestion")}</div>
       <div class="levels">${levels}</div>
-      <div class="level-ends"><span>friert schnell</span><span>friert nie</span></div>
+      <div class="level-ends"><span>${t("freezesFast")}</span><span>${t("neverFreezes")}</span></div>
       <div class="level-info" style="border-color:${levelColor}">
         <div class="level-title" style="color:${levelColor}">${levelTitle}</div>
         <div class="level-text">${levelText}</div>
@@ -546,16 +600,16 @@ function renderSettings() {
     </section>
 
     <section class="card">
-      <div class="outfit-head"><div class="eyebrow">${icon("torso", 16, "currentColor", 2)}Kleiderschrank</div><div class="hint-text">${draft.wardrobe.length} Teile ausgewählt</div></div>
-      <div class="question">Was hast du davon?</div>
-      <div class="hint-text" style="margin-top:-6px">Antippen zum An- und Abwählen. Empfohlen wird nur, was du auch besitzt.</div>
+      <div class="outfit-head"><div class="eyebrow">${icon("torso", 16, "currentColor", 2)}${t("wardrobe")}</div><div class="hint-text">${t("selected", draft.wardrobe.length)}</div></div>
+      <div class="question">${t("whatDoYouOwn")}</div>
+      <div class="hint-text" style="margin-top:-6px">${t("wardrobeHint")}</div>
       ${groups}
       <div class="legend" style="padding-top:10px;border-top:1px solid var(--card-border)">
-        <span><i class="w1"></i>leicht</span><span><i class="w2"></i>warm</span><span><i class="w3"></i>winterfest</span><span><i class="w0"></i>Regen</span>
+        <span><i class="w1"></i>${warmth[1]}</span><span><i class="w2"></i>${warmth[2]}</span><span><i class="w3"></i>${warmth[3]}</span><span><i class="w0"></i>${warmth[0]}</span>
       </div>
     </section>
 
-    <button class="primary-button" data-action="save-settings">${onboarding ? "Los geht's" : "Speichern"}</button>
+    <button class="primary-button" data-action="save-settings">${onboarding ? t("letsGo") : t("save")}</button>
   </div>`;
 }
 
@@ -563,10 +617,10 @@ async function runSearch(query) {
   state.search = { query, results: [], busy: true, error: null };
   render();
   try {
-    const results = await searchPlaces(query);
-    state.search = { query, results, busy: false, error: results.length ? null : "Kein Ort gefunden." };
+    const results = await searchPlaces(query, state.draft.language);
+    state.search = { query, results, busy: false, error: results.length ? null : t("noPlace") };
   } catch {
-    state.search = { query, results: [], busy: false, error: "Suche gerade nicht möglich." };
+    state.search = { query, results: [], busy: false, error: t("searchFailed") };
   }
   render();
 }
@@ -577,13 +631,16 @@ function saveAndClose() {
   const locationChanged = before.useGps !== after.useGps
     || before.manualPlace.latitude !== after.manualPlace.latitude
     || before.manualPlace.longitude !== after.manualPlace.longitude;
+  const languageChanged = before.language !== after.language;
 
   state.settings = after;
   saveSettings(after);
+  setLanguage(after.language);
   state.view = "home";
   state.draft = null;
 
-  if (locationChanged || !state.weather) loadWeather();
+  // Neue Sprache beim GPS-Ortsnamen? Dann auch neu laden.
+  if (locationChanged || !state.weather || (languageChanged && after.useGps)) loadWeather();
   else render();
   window.scrollTo(0, 0);
 }
@@ -603,13 +660,18 @@ app.addEventListener("click", (event) => {
   const action = target.dataset.action;
 
   if (action === "open-settings") openSettings();
-  if (action === "close-settings") { state.view = "home"; render(); }
+  if (action === "close-settings") closeSettings();
   if (action === "retry") loadWeather();
   if (action === "toggle-details") { state.showDetails = !state.showDetails; renderHome(); }
   if (action === "toggle-zone") {
     const zone = target.dataset.zone;
     state.openZone = state.openZone === zone ? null : zone;
     updateRide();
+  }
+  if (action === "set-language") {
+    state.draft.language = target.dataset.language;
+    setLanguage(state.draft.language); // Vorschau sofort in der neuen Sprache
+    renderSettings();
   }
   if (action === "set-level") { state.draft.sensitivity = Number(target.dataset.level); renderSettings(); }
   if (action === "toggle-item") {
@@ -621,8 +683,7 @@ app.addEventListener("click", (event) => {
   }
   if (action === "toggle-gps") { state.draft.useGps = !state.draft.useGps; renderSettings(); }
   if (action === "pick-place") {
-    const place = state.search.results[Number(target.dataset.index)];
-    state.draft.manualPlace = place;
+    state.draft.manualPlace = state.search.results[Number(target.dataset.index)];
     renderSettings();
   }
   if (action === "save-settings") saveAndClose();
@@ -656,8 +717,7 @@ document.addEventListener("visibilitychange", () => {
 if (state.settings.onboarded) {
   loadWeather();
 } else {
-  // Ersteinrichtung: Einstellungen zeigen. Wetter für das Beispiel lädt im Hintergrund,
-  // aber nur mit festem Ort - nach GPS fragen wir erst, wenn man auf "Los geht's" tippt.
+  // Ersteinrichtung: Einstellungen zeigen. Nach GPS fragen wir erst, wenn man auf "Los geht's" tippt.
   openSettings();
   if (!state.settings.useGps) loadWeather().then(() => { if (state.view === "settings") renderSettings(); });
 }

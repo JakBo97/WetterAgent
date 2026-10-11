@@ -66,6 +66,7 @@ button { cursor: pointer; }
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .place-date { font-size: 14px; color: var(--muted); }
+.text-button { background: none; border: 0; padding: 0; color: var(--muted); font-size: 14px; text-decoration: underline; }
 
 .icon-button {
   width: 44px; height: 44px; flex: 0 0 44px;
@@ -101,12 +102,25 @@ button { cursor: pointer; }
 
 .hero-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .now-badge {
-  display: inline-flex; align-items: center; gap: 6px;
-  background: var(--accent); color: var(--bg);
-  border-radius: 999px; padding: 3px 10px 3px 8px;
+  display: inline-flex; align-items: center; gap: 7px;
+  background: rgba(15, 17, 20, 0.55); color: var(--text); border: 1px solid var(--accent);
+  border-radius: 999px; padding: 3px 11px 3px 9px;
   font-size: 12px; font-weight: 700; letter-spacing: 0.08em;
 }
-.now-badge::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--bg); }
+/* Roter Live-Punkt, der sanft pulsiert */
+.live-dot {
+  width: 8px; height: 8px; border-radius: 50%; background: #FF3B30;
+  box-shadow: 0 0 0 0 rgba(255, 59, 48, 0.7);
+  animation: live-pulse 1.8s ease-out infinite;
+}
+@keyframes live-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(255, 59, 48, 0.7); }
+  70% { box-shadow: 0 0 0 7px rgba(255, 59, 48, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(255, 59, 48, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .live-dot { animation: none; box-shadow: 0 0 6px 1px rgba(255, 59, 48, 0.6); }
+}
 .hero-caption { font-size: 13px; color: var(--soft); }
 
 .air-badge {
@@ -114,7 +128,7 @@ button { cursor: pointer; }
   border: 2px solid var(--accent); background: rgba(15, 17, 20, 0.4);
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
 }
-.air-badge small { font-size: 9px; letter-spacing: 0.1em; font-weight: 700; color: var(--soft); }
+.air-badge small { font-size: 9px; letter-spacing: 0.06em; font-weight: 700; color: var(--soft); }
 .air-badge strong { font-family: "Barlow Condensed", sans-serif; font-size: 22px; line-height: 1; }
 
 .hero-main { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
@@ -306,6 +320,10 @@ input[type=range]:focus-visible { outline: 2px solid var(--text); outline-offset
 .chip .dot { opacity: 0.45; }
 .chip[aria-pressed="true"] { background: var(--tile-active); color: var(--text); border: 1px solid #5A606A; }
 .chip[aria-pressed="true"] .dot { opacity: 1; }
+
+.segments { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; background: var(--tile); border-radius: 14px; padding: 4px; }
+.segment { min-height: 44px; border: 0; border-radius: 10px; background: transparent; color: var(--muted); font-size: 15px; font-weight: 600; }
+.segment[aria-pressed="true"] { background: var(--text); color: var(--bg); }
 
 .switch-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .switch {

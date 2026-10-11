@@ -217,26 +217,25 @@ export function analyzeRide(current, hours, now, rideHours) {
   // Regen
   const maxRain = Math.max(0, ...rideList.map((p) => p.rainProbability));
   const heavy = rideList.find((p) => p.rainProbability >= RAIN_PROB_HIGH);
+  // Die Logik liefert nur Fakten - die Texte (Deutsch/Englisch) baut die Anzeige
   let rain = null;
   if (current.precipitation > 0) {
-    rain = { title: "Es regnet gerade", sub: "Regenkombi gleich anziehen" };
+    rain = { kind: "now" };
   } else if (heavy) {
-    rain = { title: `Regen ab ca. ${heavy.time.getHours()} Uhr`,
-             sub: `${heavy.rainProbability} % Wahrscheinlichkeit während deiner Fahrt` };
+    rain = { kind: "from", hour: heavy.time.getHours(), probability: heavy.rainProbability };
   } else if (maxRain >= RAIN_PROB_MODERATE) {
-    rain = { title: "Schauer möglich", sub: `bis zu ${maxRain} % während deiner Fahrt` };
+    rain = { kind: "possible", probability: maxRain };
   }
 
   // Wind
   const maxGusts = Math.max(current.windGusts, ...rideList.map((p) => p.gusts));
   let wind = null;
   if (current.windGusts >= GUSTS_STRONG) {
-    wind = { title: "Starke Böen", sub: `Böen bis ${Math.round(maxGusts)} km/h` };
+    wind = { kind: "now", maxGusts: Math.round(maxGusts) };
   } else {
     const strong = rideList.find((p) => p.gusts >= GUSTS_STRONG);
     if (strong) {
-      wind = { title: `Böig ab ca. ${strong.time.getHours()} Uhr`,
-               sub: `Böen bis ${Math.round(maxGusts)} km/h` };
+      wind = { kind: "from", hour: strong.time.getHours(), maxGusts: Math.round(maxGusts) };
     }
   }
   const windLevel = maxGusts >= GUSTS_STRONG ? 3 : (maxGusts >= GUSTS_MODERATE ? 2 : 1);
@@ -324,8 +323,8 @@ export function recommendOutfit(coldest, sensitivity, wardrobe, rainExpected, ch
   }
 
   let tip = null;
-  if (change <= -TREND_CHANGE) tip = "Wird während der Fahrt deutlich kälter – lieber gleich warm anziehen.";
-  else if (change >= TREND_CHANGE) tip = "Wird während der Fahrt wärmer – eine Schicht zum Ausziehen einplanen.";
+  if (change <= -TREND_CHANGE) tip = "colder";
+  else if (change >= TREND_CHANGE) tip = "warmer";
 
   return { level, zones, rainGear, tip };
 }

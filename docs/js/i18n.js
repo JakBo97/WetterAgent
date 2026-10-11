@@ -1,0 +1,265 @@
+// =====================================================================
+// Sprachen: alle Texte der App auf Deutsch und Englisch.
+// Neue Sprache = neuer Block mit denselben Schlüsseln.
+// =====================================================================
+
+const TEXTS = {
+  de: {
+    weekdays: ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"],
+    months: ["Jan", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"],
+    dateFormat: (wd, day, month, time) => `${wd}, ${day}. ${month} · ${time}`,
+    atHour: (h) => `${h} Uhr`,
+
+    myLocation: "Mein Standort",
+    updated: (time) => `Aktualisiert ${time}`,
+    settings: "Einstellungen",
+    back: "Zurück",
+    loading: "Wetter wird geladen …",
+    retry: "Nochmal versuchen",
+    setLocation: "Standort einstellen",
+    loadError: "Wetter konnte nicht geladen werden.",
+    gpsUnsupported: "Dieses Gerät unterstützt keine Standortabfrage.",
+    gpsDenied: "Standortzugriff wurde nicht erlaubt.",
+    gpsFailed: "Standort konnte nicht ermittelt werden.",
+
+    now: "JETZT",
+    feltOnBike: "gefühlt auf dem Motorrad",
+    outside: "AUSSEN",
+    bands: ["Sehr kalt", "Kalt", "Kühl", "Angenehm", "Warm", "Heiß"],
+    gaugeLabel: (band) => `Temperaturanzeige von sehr kalt bis heiß, Zeiger auf ${band}`,
+    iceTitle: "Glättegefahr",
+    iceUntil: (time) => `Bis ca. ${time}`,
+    iceNow: "Jetzt",
+    iceText: "Boden um 0 °C, Brücken und Schattenlagen",
+
+    yourRide: "Deine Fahrt",
+    howLong: "Wie lange fährst du?",
+    until: (time) => `bis ${time}`,
+    iceFrom: (time) => `Glättegefahr ab ca. ${time}`,
+    rainNow: "Es regnet gerade",
+    rainNowSub: "Regenkombi gleich anziehen",
+    rainFrom: (time) => `Regen ab ca. ${time}`,
+    rainFromSub: (p) => `${p} % Wahrscheinlichkeit während deiner Fahrt`,
+    rainPossible: "Schauer möglich",
+    rainPossibleSub: (p) => `bis zu ${p} % während deiner Fahrt`,
+    windNow: "Starke Böen",
+    windFrom: (time) => `Böig ab ca. ${time}`,
+    windSub: (g) => `Böen bis ${g} km/h`,
+    calm: (time, windy) => `Bis ${time}: trocken · ${windy ? "etwas Wind" : "kaum Wind"}`,
+    rainRow: "Regen %",
+    gustRow: "Böen km/h",
+    showDetails: "Regen & Wind im Verlauf",
+    hideDetails: "Weniger anzeigen",
+
+    dress: "Anziehen",
+    forColdest: (t) => `für ${t}° im kältesten Moment`,
+    zones: { head: "Kopf", torso: "Oberkörper", hands: "Hände", legs: "Unterkörper", boots: "Schuhe", rain: "Regen" },
+    nothingExtra: "Nichts extra",
+    layersBelow: (n) => (n === 1 ? "Schicht darunter" : "Schichten darunter"),
+    notOwned: "nicht im Kleiderschrank",
+    warmth: { 0: "Regen", 1: "leicht", 2: "warm", 3: "winterfest" },
+    notNeeded: "Nicht nötig",
+    dryRide: "trocken unterwegs",
+    rainAt: (time) => `Regen ab ${time}`,
+    takeAlong: "mitnehmen",
+    outsideIn: "von außen nach innen",
+    tipColder: "Wird während der Fahrt deutlich kälter – lieber gleich warm anziehen.",
+    tipWarmer: "Wird während der Fahrt wärmer – eine Schicht zum Ausziehen einplanen.",
+
+    welcome: "Willkommen",
+    setupHint: "Kurz einrichten, damit die Empfehlungen zu dir passen",
+    settingsHint: "Damit die Empfehlungen zu dir passen",
+    language: "Sprache",
+    location: "Standort",
+    gps: "Automatisch per GPS",
+    gpsOn: "Beim Öffnen wird dein Standort abgefragt",
+    gpsOff: "Aus – fester Ort wird genutzt",
+    current: "Aktuell",
+    searchPlace: "Ort suchen",
+    searchPlaceholder: "Ort suchen, z. B. Kassel",
+    search: "Suchen",
+    noPlace: "Kein Ort gefunden.",
+    searchFailed: "Suche gerade nicht möglich.",
+    coldFeeling: "Kälteempfinden",
+    coldQuestion: "Wie schnell frierst du auf dem Motorrad?",
+    freezesFast: "friert schnell",
+    neverFreezes: "friert nie",
+    level: (n, title) => `Stufe ${n}: ${title}`,
+    levels: [
+      ["Fröstelt schnell", "Du frierst früh. Wir empfehlen dir deutlich wärmere Kleidung, meist eine Schicht mehr."],
+      ["Eher verfroren", "Du magst es lieber etwas wärmer. Wir empfehlen dir etwas wärmere Kleidung."],
+      ["Normal", "Wir empfehlen Kleidung, die für die meisten Fahrer passt."],
+      ["Robust", "Kälte macht dir wenig aus. Wir empfehlen dir etwas leichtere Kleidung."],
+      ["Friert nie", "Kälte? Welche Kälte? Wir empfehlen dir deutlich leichtere Kleidung, meist eine Schicht weniger."],
+    ],
+    example: (t) => `Beispiel: Bei ${t}° auf dem Motorrad empfehlen wir dir oben herum`,
+    noDifference: "Bei dieser Temperatur macht die Einstellung keinen Unterschied – das zeigt sich an anderen Tagen.",
+    wardrobe: "Kleiderschrank",
+    selected: (n) => `${n} Teile ausgewählt`,
+    whatDoYouOwn: "Was hast du davon?",
+    wardrobeHint: "Antippen zum An- und Abwählen. Empfohlen wird nur, was du auch besitzt.",
+    countOf: (a, b) => `${a} von ${b}`,
+    letsGo: "Los geht's",
+    save: "Speichern",
+
+    // Kleidungsstücke: intern bleiben die deutschen Namen der Schlüssel
+    items: {},
+  },
+
+  en: {
+    weekdays: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
+    months: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
+    dateFormat: (wd, day, month, time) => `${wd}, ${month} ${day} · ${time}`,
+    atHour: (h) => `${String(h).padStart(2, "0")}:00`,
+
+    myLocation: "My location",
+    updated: (time) => `Updated ${time}`,
+    settings: "Settings",
+    back: "Back",
+    loading: "Loading weather …",
+    retry: "Try again",
+    setLocation: "Set location",
+    loadError: "Couldn't load the weather.",
+    gpsUnsupported: "This device doesn't support location.",
+    gpsDenied: "Location access was not allowed.",
+    gpsFailed: "Couldn't determine your location.",
+
+    now: "NOW",
+    feltOnBike: "feels like on the bike",
+    outside: "OUTSIDE",
+    bands: ["Very cold", "Cold", "Cool", "Pleasant", "Warm", "Hot"],
+    gaugeLabel: (band) => `Temperature gauge from very cold to hot, pointing at ${band}`,
+    iceTitle: "Risk of ice",
+    iceUntil: (time) => `Until about ${time}`,
+    iceNow: "Right now",
+    iceText: "Ground around 0 °C, watch bridges and shady spots",
+
+    yourRide: "Your ride",
+    howLong: "How long are you riding?",
+    until: (time) => `until ${time}`,
+    iceFrom: (time) => `Risk of ice from about ${time}`,
+    rainNow: "It's raining right now",
+    rainNowSub: "Put your rain suit on now",
+    rainFrom: (time) => `Rain from about ${time}`,
+    rainFromSub: (p) => `${p} % chance during your ride`,
+    rainPossible: "Showers possible",
+    rainPossibleSub: (p) => `up to ${p} % during your ride`,
+    windNow: "Strong gusts",
+    windFrom: (time) => `Gusty from about ${time}`,
+    windSub: (g) => `Gusts up to ${g} km/h`,
+    calm: (time, windy) => `Until ${time}: dry · ${windy ? "a little wind" : "hardly any wind"}`,
+    rainRow: "Rain %",
+    gustRow: "Gusts km/h",
+    showDetails: "Rain & wind by the hour",
+    hideDetails: "Show less",
+
+    dress: "What to wear",
+    forColdest: (t) => `for ${t}° at the coldest moment`,
+    zones: { head: "Head", torso: "Upper body", hands: "Hands", legs: "Lower body", boots: "Footwear", rain: "Rain" },
+    nothingExtra: "Nothing extra",
+    layersBelow: (n) => (n === 1 ? "layer underneath" : "layers underneath"),
+    notOwned: "not in your wardrobe",
+    warmth: { 0: "Rain", 1: "light", 2: "warm", 3: "winter-proof" },
+    notNeeded: "Not needed",
+    dryRide: "dry ride",
+    rainAt: (time) => `Rain from ${time}`,
+    takeAlong: "take it along",
+    outsideIn: "outside to inside",
+    tipColder: "It gets noticeably colder during your ride – better dress warm right away.",
+    tipWarmer: "It gets warmer during your ride – plan a layer you can take off.",
+
+    welcome: "Welcome",
+    setupHint: "A quick setup so the tips fit you",
+    settingsHint: "So the tips fit you",
+    language: "Language",
+    location: "Location",
+    gps: "Automatic via GPS",
+    gpsOn: "Your location is checked when the app opens",
+    gpsOff: "Off – a fixed place is used",
+    current: "Current",
+    searchPlace: "Search place",
+    searchPlaceholder: "Search a place, e.g. Munich",
+    search: "Search",
+    noPlace: "No place found.",
+    searchFailed: "Search isn't available right now.",
+    coldFeeling: "Cold sensitivity",
+    coldQuestion: "How quickly do you get cold on the bike?",
+    freezesFast: "gets cold fast",
+    neverFreezes: "never gets cold",
+    level: (n, title) => `Level ${n}: ${title}`,
+    levels: [
+      ["Chilly quickly", "You get cold early. We recommend clearly warmer clothes, usually one layer more."],
+      ["On the chilly side", "You like it a bit warmer. We recommend slightly warmer clothes."],
+      ["Normal", "We recommend clothes that suit most riders."],
+      ["Tough", "Cold doesn't bother you much. We recommend slightly lighter clothes."],
+      ["Never cold", "Cold? What cold? We recommend clearly lighter clothes, usually one layer less."],
+    ],
+    example: (t) => `Example: at ${t}° on the bike we'd recommend for your upper body`,
+    noDifference: "At this temperature the setting makes no difference – you'll see it on other days.",
+    wardrobe: "Wardrobe",
+    selected: (n) => `${n} items selected`,
+    whatDoYouOwn: "What do you own?",
+    wardrobeHint: "Tap to select or deselect. We only recommend what you actually have.",
+    countOf: (a, b) => `${a} of ${b}`,
+    letsGo: "Let's go",
+    save: "Save",
+
+    items: {
+      "Halstuch": "Neck gaiter",
+      "Dünne Sturmhaube": "Thin balaclava",
+      "Winter-Sturmhaube": "Winter balaclava",
+      "T-Shirt": "T-shirt",
+      "Langarm-Shirt": "Long-sleeve shirt",
+      "Thermo-Shirt": "Thermal top",
+      "Pullover": "Sweater",
+      "Heizweste": "Heated vest",
+      "Mesh-Jacke": "Mesh jacket",
+      "Jacke ohne Futter": "Jacket, no liner",
+      "Jacke mit Futter": "Jacket with liner",
+      "Winterjacke": "Winter jacket",
+      "Sommerhandschuhe": "Summer gloves",
+      "Übergangshandschuhe": "All-season gloves",
+      "Winterhandschuhe": "Winter gloves",
+      "Thermohose": "Thermal leggings",
+      "Motorradjeans": "Riding jeans",
+      "Motorradhose": "Riding pants",
+      "Hose mit Futter": "Lined pants",
+      "Thermosocken": "Thermal socks",
+      "Motorrad-Sneaker": "Riding sneakers",
+      "Motorradstiefel": "Riding boots",
+      "Winterstiefel": "Winter boots",
+      "Regenkombi": "Rain suit",
+      "Regenjacke": "Rain jacket",
+      "Regenhose": "Rain pants",
+      "Überziehschuhe": "Boot covers",
+    },
+  },
+};
+
+export const LANGUAGES = [
+  { code: "de", name: "Deutsch" },
+  { code: "en", name: "English" },
+];
+
+let currentLanguage = "de";
+
+export function setLanguage(code) {
+  currentLanguage = TEXTS[code] ? code : "de";
+  document.documentElement.lang = currentLanguage;
+}
+
+export function guessLanguage() {
+  const preferred = (navigator.language || "de").slice(0, 2).toLowerCase();
+  return TEXTS[preferred] ? preferred : "en";
+}
+
+// Text holen: t("save") oder t("until", "17:50")
+export function t(key, ...args) {
+  const value = TEXTS[currentLanguage][key];
+  return typeof value === "function" ? value(...args) : value;
+}
+
+// Kleidungsstück in der aktuellen Sprache (mehrere mit " + " verbunden)
+export function itemName(name) {
+  return name.split(" + ").map((part) => TEXTS[currentLanguage].items[part] || part).join(" + ");
+}
