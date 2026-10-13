@@ -59,21 +59,28 @@ Wenn sich Regeln in `logic.js` ändern, sag Bescheid, ob `main.py` nachgezogen w
 - **Kälteempfinden** (Stufe 1 friert schnell … 3 normal … 5 friert nie) verschiebt **nur die
   Kleidungsstufe** (±1/±2), niemals die angezeigte Temperatur.
 - **Kleidung** richtet sich nach dem **kältesten Moment der Fahrt**, nicht nach jetzt.
-  Kleidungsstufen 1–5, Outfits in `OUTFITS`, Teile mit Zone/Rolle/Wärme in `CATALOG`.
-- **Kleiderschrank**: Empfohlen wird nur, was man besitzt. Fehlt ein Teil, wird der beste Ersatz
-  gleicher Zone und Rolle gewählt; fehlt ein Außenteil ganz, wird es mit "nicht im Kleiderschrank" angezeigt.
-  Jede Zone darf im Kleiderschrank leer sein. Beim ersten Öffnen sind nur Textiljacke und Textilhose
+  Kleidungsstufen 1–5 nach Fahrtemperatur: ab 19°, 15–19°, 10–15°, 5–10°, unter 5° (`CLOTHING_LEVELS`).
+- **Punktesystem**: Jedes Teil in `CATALOG` hat Zone, Rolle, Wärme (1–3, nur Anzeige) und **Punkte (1–10)**.
+  Oberkörper zählt am meisten, dann Unterkörper, dann Schuhe; Kopf und Hände wenig (Sturmhaube 1,
+  Halstuch 2). Keine 10 (wäre eine beheizte Winterjacke). `ZONE_NEEDS` legt pro Zone und Stufe fest, wie
+  viele Punkte nötig sind; gezählt wird nur Wärme, nicht Schutz.
+- **Auswahl** (`selectZone`): pro Zone die Kombination aus dem Kleiderschrank, die den Bedarf deckt und
+  am wenigsten darüber liegt; bei Gleichstand weniger Teile. Höchstens ein Teil pro Rolle.
+  Reicht der Kleiderschrank nicht, die wärmste Kombination + Hinweis "evtl. zu kalt" (nicht beim Kopf).
+  Kopf ohne Bedarf: Sturmhaube als "optional", wenn man eine hat.
+- **Kleiderschrank**: Empfohlen wird nur, was man besitzt. Fehlt für eine Zone jedes Außenteil, wird das
+  passende mit "nicht im Kleiderschrank" angezeigt. Jede Zone darf im Kleiderschrank leer sein. Beim ersten Öffnen sind nur Textiljacke und Textilhose
   ausgewählt (nicht gesperrt). Umbenannte Teile werden beim Laden übernommen (`RENAMED_ITEMS`),
   Teile, die es nicht mehr gibt, aussortiert.
 - **Schutzkleidung** (Einstellung `alwaysGear`, Standard an): An = Jacke, Hose und Handschuhe werden
-  immer empfohlen. Aus = in den Zonen `GEAR_ZONES` steht bei Wärme (bis `GEAR_OPTIONAL_UP_TO_LEVEL`)
-  "Keine Schutzkleidung" + "Schutzkleidung empfohlen"; die Teile erscheinen aufgeklappt als "optional".
+  immer empfohlen. Aus = in den Zonen `GEAR_ZONES` steht, solange sie keine Wärmepunkte
+  brauchen, "Keine Schutzkleidung" + "Schutzkleidung empfohlen"; die Teile erscheinen aufgeklappt als "optional".
   Ein T-Shirt o. Ä. kommt bewusst nicht in den Kleiderschrank.
 - **Katalog bewusst schlank**: Kopf nur Sturmhaube + Halstuch (Halstuch nie allein, nur als Zusatz zur
   Sturmhaube, wenn es sehr kalt ist), kein T-Shirt, Jacke und Hose je als Textil
   oder Leder (kein Futter-Unterschied), Handschuhe nur Sommer/Winter, keine Winterstiefel.
 - **Mindestanforderung**: Unterschichten (Thermohose, Thermosocken, Thermo-Shirt …) nie ohne Außenteil
-  der gleichen Zone. Jede Zone in `OUTFITS` mit Inhalt braucht ein Außenteil (wird beim Laden geprüft).
+  der gleichen Zone. Das stellt `selectZone` sicher (jede Kombination enthält ein Außenteil).
 - **Wärmestufen** der Kleidung: 1 leicht, 2 warm, 3 winterfest (0 = Regen).
 - **Glätte** (Schätzung): Boden ≤ 1 °C **und** (Regen in den letzten 3 h **oder** Luft nahe Taupunkt).
   Glätte "jetzt" steht im Jetzt-Block, Glätte "später" im Fahrt-Block, nie doppelt.
@@ -102,7 +109,8 @@ Weitere Festlegungen:
 - Markenfarbe Race-Orange `#FF8A3D`. Temperaturfarben: eisblau → blau → türkis → grün → gelb → orange.
 - Regen immer blau, Wind immer lila, Glätte orange-gelb.
 - Einstellungen: Sprache (EN/DE, Standard Englisch; Deutsch wählt man aktiv), Standort (GPS an/aus + Ortssuche), Kälteempfinden mit
-  Live-Beispiel bei aktueller Temperatur (bei "Normal" das ganze Ideal-Outfit, sonst nur die Unterschiede
+  Live-Beispiel bei aktueller Temperatur (bei "Normal" das ganze Ideal-Outfit mit dem
+  typischen Kleiderschrank `REFERENCE_WARDROBE`, sonst nur die Unterschiede
   zu "Normal": + dazu, − weg, "X statt Y"; unabhängig vom Kleiderschrank), Kleiderschrank als An/Aus-Chips nach Zonen
   mit Schalter "Immer mit Schutzkleidung".
 - Ersteinrichtung = dieselbe Einstellungsseite mit "Los geht's" statt "Speichern".
@@ -113,6 +121,9 @@ Weitere Festlegungen:
 
 - Lokal: im Ordner `docs` `python -m http.server` ausführen, dann http://localhost:8000 öffnen.
   (Die `index.html` per Doppelklick zu öffnen funktioniert wegen der JS-Module nicht.)
+- **Testmodus**: `?test` an die Adresse hängen (z. B. http://localhost:8000/?test). Dann erscheint über der
+  Startseite eine Leiste "Live | 25° | 15° | 5°", die die Lufttemperatur festlegt (`TEST_TEMPERATURES`
+  in `app.js`); alles andere bleibt echtes Wetter. Ohne `?test` ist die Leiste unsichtbar.
 - **Cache-Busting**: Alle Dateiverweise tragen eine Versionsnummer (z. B. `?v=1`): in `index.html`
   (`style.css`, `js/app.js`) und bei den `import`s oben in `js/app.js`. Pro Commit, der
   `docs/` ändert, die Nummer **einmal und überall gleich** um 1 erhöhen, sonst lädt das iPhone die alte Version.

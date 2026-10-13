@@ -4,12 +4,12 @@
 // =====================================================================
 
 // Versionsnummer (?v=...) gleich halten wie in index.html (Cache-Busting).
-import { fetchWeather, parseCurrent, parseHourly, getGpsPosition, getPlaceName, searchPlaces } from "./data.js?v=4";
+import { fetchWeather, parseCurrent, parseHourly, getGpsPosition, getPlaceName, searchPlaces } from "./data.js?v=5";
 import {
-  buildQuickCheck, getRidingTemperature, getFeelBand, getClothingLevel, compareOutfits,
-  FEEL_BANDS, OUTFITS, CATALOG, ZONES, RAIN_GEAR, GUSTS_STRONG,
-} from "./logic.js?v=4";
-import { t, itemName, setLanguage, LANGUAGES } from "./i18n.js?v=4";
+  buildQuickCheck, getRidingTemperature, getFeelBand, getClothingLevel, compareOutfits, idealOutfit,
+  FEEL_BANDS, CATALOG, ZONES, RAIN_GEAR, GUSTS_STRONG,
+} from "./logic.js?v=5";
+import { t, itemName, setLanguage, LANGUAGES } from "./i18n.js?v=5";
 
 // ---------------------------------------------------------------------
 // Einstellungen (im Speicher des Handys)
@@ -73,6 +73,7 @@ const state = {
   loading: false,
   error: null,
   search: { query: "", results: [], busy: false, error: null },
+  testTemperature: null, // Testmodus: feste Lufttemperatur statt der echten (null = live)
 };
 
 setLanguage(state.settings.language);
@@ -172,8 +173,31 @@ async function loadWeather() {
 // Startseite
 // ---------------------------------------------------------------------
 
-function currentCheck() {
+// ---------------------------------------------------------------------
+// Testmodus (nur mit ?test in der Adresse): Lufttemperatur festlegen, um zu vergleichen
+// ---------------------------------------------------------------------
+
+const TEST_MODE = new URLSearchParams(location.search).has("test");
+const TEST_TEMPERATURES = [25, 15, 5];
+
+// Das Wetter, mit dem die App rechnet: echt oder mit der Test-Temperatur
+function shownWeather() {
   const { current, hours } = state.weather;
+  const temperature = state.testTemperature;
+  if (temperature === null) return { current, hours };
+  return { current: { ...current, temperature }, hours: hours.map((hour) => ({ ...hour, temperature })) };
+}
+
+function renderTestBar() {
+  const options = [null, ...TEST_TEMPERATURES].map((value) => `<button class="segment" data-action="set-test-temperature"
+    data-temperature="${value === null ? "" : value}" aria-pressed="${state.testTemperature === value}">${value === null ? t("live") : `${deg(value)}°`}</button>`).join("");
+  return `<section class="test-bar">
+    <div class="eyebrow">${t("testMode")}</div>
+    <div class="segments four">${options}</div></section>`;
+}
+
+function currentCheck() {
+  const { current, hours } = shownWeather();
   return buildQuickCheck(current, hours, new Date(), state.rideHours,
     state.settings.sensitivity, new Set(state.settings.wardrobe), state.settings.alwaysGear);
 }
@@ -194,7 +218,7 @@ function renderHome() {
       <button class="secondary-button" data-action="open-settings">${t("setLocation")}</button>
     </section>`;
   } else if (weather) {
-    body = renderHero(currentCheck()) + renderRideShell() + `<section class="card" id="outfit"></section>`;
+    body = (TEST_MODE ? renderTestBar() : "") + renderHero(currentCheck()) + renderRideShell() + `<section class="card" id="outfit"></section>`;
   }
 
   const updated = weather
@@ -425,12 +449,16 @@ function renderOutfit(check) {
       itemText = t("noGear");
       meta = `<span class="muted">${t("gearRecommended")}</span>`;
       strip = "<i></i>";
-    } else if (layers.length > 1) {
+    } else if (layers.length) {
+      // Wichtige Hinweise stehen direkt auf der Kachel: fehlt im Kleiderschrank, evtl. zu kalt, optional
+      let note = null;
+      if (outer.missing) note = t("notOwned");
+      else if (zone.tooCold) note = t("tooCold");
+      else if (outer.optional) note = t("optional");
       const n = layers.length - 1;
-      // Fehlt das Außenteil im Kleiderschrank, steht der Hinweis direkt auf der Kachel
-      meta = `<span class="more-badge">+${n}</span><span>${outer.missing ? t("notOwned") : t("layersBelow", n)}</span>`;
-    } else if (layers.length === 1) {
-      meta = `<span class="muted">${outer.missing ? t("notOwned") : warmth[outer.warmth]}</span>`;
+      meta = n > 0
+        ? `<span class="more-badge">+${n}</span><span>${note || t("layersBelow", n)}</span>`
+        : `<span class="muted">${note || warmth[outer.warmth]}</span>`;
     }
 
     const inner = `<span class="tile-zone">${icon(zone.key, 22, "#C3C7CD")}${t("zones")[zone.key]}</span>
@@ -515,14 +543,15 @@ function closeSettings() {
 
 function renderExample(draft) {
   // Beispiel mit der aktuellen Fahrtemperatur (oder 10 °C, solange kein Wetter da ist)
-  const riding = state.weather ? getRidingTemperature(state.weather.current.temperature) : 10;
+  const riding = state.weather ? getRidingTemperature(shownWeather().current.temperature) : 10;
   const baseLevel = getClothingLevel(riding, 3);
   const level = getClothingLevel(riding, draft.sensitivity);
   const named = (name) => `<span class="dot w${CATALOG[name][2]}"></span>${escapeHtml(itemName(name))}`;
 
   // Normal: das komplette Ideal-Outfit (unabhängig vom Kleiderschrank)
   if (draft.sensitivity === 3) {
-    const items = ZONES.flatMap((zone) => OUTFITS[level][zone.key]);
+    const ideal = idealOutfit(level);
+    const items = ZONES.flatMap((zone) => ideal[zone.key]);
     const chips = items.map((name) => `<span class="chip-static">${named(name)}</span>`).join("");
     return `<div class="example">
       <span class="hint-text">${t("example", deg(riding))}</span>
@@ -705,6 +734,11 @@ app.addEventListener("click", (event) => {
     if (set.has(name)) set.delete(name); else set.add(name);
     state.draft.wardrobe = [...set];
     renderSettings();
+  }
+  if (action === "set-test-temperature") {
+    const value = target.dataset.temperature;
+    state.testTemperature = value === "" ? null : Number(value);
+    renderHome();
   }
   if (action === "toggle-gps") { state.draft.useGps = !state.draft.useGps; renderSettings(); }
   if (action === "toggle-gear") { state.draft.alwaysGear = !state.draft.alwaysGear; renderSettings(); }

@@ -29,7 +29,7 @@ export const FEEL_BANDS = [
 ];
 
 // Kleidungsstufe nach kältestem Moment: unter diesem Wert -> Stufe (sonst 1)
-const CLOTHING_LEVELS = [[5, 5], [10, 4], [14, 3], [19, 2]];
+const CLOTHING_LEVELS = [[5, 5], [10, 4], [15, 3], [19, 2]];
 
 // Kälteempfinden verschiebt die Kleidungsstufe
 const SENSITIVITY_SHIFT = { 1: 2, 2: 1, 3: 0, 4: -1, 5: -2 };
@@ -48,66 +48,52 @@ export const ZONES = [
   { key: "boots", name: "Schuhe" },
 ];
 
-// Alle Teile, die die App kennt: Name -> [Zone, Rolle, Wärme]
+// Alle Teile, die die App kennt: Name -> [Zone, Rolle, Wärme, Punkte]
 // Rolle: "base" = unten drunter, "mid" = Zwischenschicht/Zusatz, "outer" = außen
+// Wärme (1-3) ist nur für Farbe und Wort in der Anzeige.
+// Punkte (1-10) sind für die Berechnung: Oberkörper zählt am meisten, dann Unterkörper,
+// dann Schuhe; Kopf und Hände eher wenig. Eine 10 wäre eine beheizte Winterjacke.
 export const CATALOG = {
-  "Halstuch": ["head", "mid", 1],     // nur als Zusatz zur Sturmhaube, nie allein
-  "Sturmhaube": ["head", "outer", 2],
-  "Langarm-Shirt": ["torso", "base", 1],
-  "Thermo-Shirt": ["torso", "base", 2],
-  "Pullover": ["torso", "mid", 2],
-  "Heizweste": ["torso", "mid", 3],
-  "Textiljacke": ["torso", "outer", 2],
-  "Lederjacke": ["torso", "outer", 2],
-  "Sommerhandschuhe": ["hands", "outer", 1],
-  "Winterhandschuhe": ["hands", "outer", 3],
-  "Thermohose": ["legs", "base", 2],
-  "Motorradjeans": ["legs", "outer", 1],
-  "Textilhose": ["legs", "outer", 2],
-  "Lederhose": ["legs", "outer", 2],
-  "Thermosocken": ["boots", "base", 2],
-  "Motorrad-Sneaker": ["boots", "outer", 1],
-  "Motorradstiefel": ["boots", "outer", 2],
+  "Halstuch": ["head", "mid", 1, 2],      // nur als Zusatz zur Sturmhaube, nie allein
+  "Sturmhaube": ["head", "outer", 2, 1],
+  "Langarm-Shirt": ["torso", "base", 1, 2],
+  "Thermo-Shirt": ["torso", "base", 2, 3],
+  "Pullover": ["torso", "mid", 2, 4],
+  "Heizweste": ["torso", "mid", 3, 7],
+  "Textiljacke": ["torso", "outer", 2, 6],
+  "Lederjacke": ["torso", "outer", 2, 5],
+  "Sommerhandschuhe": ["hands", "outer", 1, 1],
+  "Winterhandschuhe": ["hands", "outer", 3, 4],
+  "Thermohose": ["legs", "base", 2, 3],
+  "Motorradjeans": ["legs", "outer", 1, 3],
+  "Textilhose": ["legs", "outer", 2, 5],
+  "Lederhose": ["legs", "outer", 2, 4],
+  "Thermosocken": ["boots", "base", 2, 2],
+  "Motorrad-Sneaker": ["boots", "outer", 1, 2],
+  "Motorradstiefel": ["boots", "outer", 2, 4],
 };
+
+// Punktebedarf je Zone und Kleidungsstufe 1-5
+// (Stufe 1: ab 19° Fahrtemperatur, 2: 15-19°, 3: 10-15°, 4: 5-10°, 5: unter 5°).
+// Gezählt wird nur, was zum Wärmen nötig ist - Schutzkleidung regelt GEAR_ZONES.
+const ZONE_NEEDS = {
+  head: [0, 1, 3, 3, 3],    // 1 = Sturmhaube, 3 = Sturmhaube + Halstuch
+  torso: [0, 7, 8, 9, 13],
+  hands: [0, 1, 4, 4, 4],
+  legs: [0, 3, 5, 8, 8],
+  boots: [2, 4, 4, 6, 6],
+};
+
+// Typischer Kleiderschrank für das Beispiel beim Kälteempfinden (ohne Sonderteile)
+const REFERENCE_WARDROBE = new Set(Object.keys(CATALOG)
+  .filter((name) => !["Heizweste", "Lederjacke", "Lederhose"].includes(name)));
 
 export const RAIN_GEAR = "Regenkombi";
 
 // Schutzkleidung: Zonen, deren Außenteil (Jacke, Hose, Handschuhe) vor allem schützt.
-// Fährt jemand nicht immer mit Schutzkleidung, sind sie nur optional, solange sie
-// nicht zum Wärmen gebraucht werden - das ist bis zu dieser Kleidungsstufe der Fall.
+// Fährt jemand nicht immer mit Schutzkleidung, sind sie nur optional, solange die Zone
+// keine Wärmepunkte braucht.
 export const GEAR_ZONES = ["torso", "legs", "hands"];
-const GEAR_OPTIONAL_UP_TO_LEVEL = 1;
-
-// Ideales Outfit je Kleidungsstufe, Schichten von innen nach außen
-export const OUTFITS = {
-  5: { head: ["Halstuch", "Sturmhaube"], torso: ["Thermo-Shirt", "Pullover", "Textiljacke"],
-       hands: ["Winterhandschuhe"], legs: ["Thermohose", "Textilhose"],
-       boots: ["Thermosocken", "Motorradstiefel"] },
-  4: { head: ["Sturmhaube"], torso: ["Thermo-Shirt", "Textiljacke"],
-       hands: ["Winterhandschuhe"], legs: ["Thermohose", "Textilhose"],
-       boots: ["Thermosocken", "Motorradstiefel"] },
-  3: { head: ["Sturmhaube"], torso: ["Langarm-Shirt", "Textiljacke"],
-       hands: ["Winterhandschuhe"], legs: ["Textilhose"],
-       boots: ["Motorradstiefel"] },
-  2: { head: [], torso: ["Langarm-Shirt", "Textiljacke"],
-       hands: ["Sommerhandschuhe"], legs: ["Motorradjeans"],
-       boots: ["Motorradstiefel"] },
-  1: { head: [], torso: ["Textiljacke"],
-       hands: ["Sommerhandschuhe"], legs: ["Motorradjeans"],
-       boots: ["Motorrad-Sneaker"] },
-};
-
-// Mindestanforderung: Unterschichten (z. B. Thermohose, Thermosocken, Halstuch) nie ohne Außenteil.
-// Deshalb muss jede Zone eines Outfits, in der überhaupt etwas steht, ein Außenteil enthalten.
-// Das Außenteil wird immer angezeigt - notfalls als "nicht im Kleiderschrank" (pickFromWardrobe).
-// Diese Prüfung meldet sich in der Browser-Konsole, falls OUTFITS einmal falsch geändert wird.
-for (const [level, outfit] of Object.entries(OUTFITS)) {
-  for (const [zone, items] of Object.entries(outfit)) {
-    if (items.length && !items.some((item) => CATALOG[item][1] === "outer")) {
-      console.error(`OUTFITS Stufe ${level}, Zone ${zone}: Außenteil fehlt`);
-    }
-  }
-}
 
 // ---------------------------------------------------------------------
 // Temperatur
@@ -272,46 +258,58 @@ export function analyzeRide(current, hours, now, rideHours) {
 // Block 3: ANZIEHEN
 // ---------------------------------------------------------------------
 
-const CATALOG_ORDER = Object.keys(CATALOG);
+const itemsOf = (zone, role) => Object.keys(CATALOG)
+  .filter((name) => CATALOG[name][0] === zone && CATALOG[name][1] === role);
+const pointsOf = (items) => items.reduce((sum, name) => sum + CATALOG[name][3], 0);
 
-// Gibt das empfohlene Teil zurück oder den besten Ersatz aus dem Kleiderschrank.
-// Ergebnis: { name, missing } - oder null, wenn eine Unterschicht einfach wegfällt.
-export function pickFromWardrobe(item, wardrobe) {
-  if (wardrobe.has(item)) return { name: item, missing: false };
-
-  const [zone, role, warmth] = CATALOG[item];
-  const candidates = [...wardrobe].filter((name) =>
-    CATALOG[name] && CATALOG[name][0] === zone && CATALOG[name][1] === role);
-
-  if (candidates.length) {
-    // Am nächsten an der gewünschten Wärme, bei Gleichstand lieber wärmer.
-    // Danach: ersetzen wir ein leichteres Teil, das leichteste passende, sonst das wärmste.
-    const ranking = (name) => {
-      const w = CATALOG[name][2];
-      const position = CATALOG_ORDER.indexOf(name);
-      return [Math.abs(w - warmth), -w, w > warmth ? position : -position];
-    };
-    candidates.sort((a, b) => {
-      const ra = ranking(a);
-      const rb = ranking(b);
-      for (let i = 0; i < ra.length; i++) {
-        if (ra[i] !== rb[i]) return ra[i] - rb[i];
-      }
-      return 0;
-    });
-    return { name: candidates[0], missing: false };
-  }
-
-  if (role === "outer") return { name: item, missing: true };
-  return null;
+// Ist Kombination a besser als b? Erst: reicht es? Reicht es, möglichst wenig Punkte zu viel,
+// sonst möglichst viele Punkte. Bei Gleichstand: weniger Teile.
+function isBetter(a, b) {
+  if (a.enough !== b.enough) return a.enough;
+  if (a.points !== b.points) return a.enough ? a.points < b.points : a.points > b.points;
+  return a.items.length < b.items.length;
 }
 
-// Was ändert sich zwischen zwei Kleidungsstufen? Vergleicht die Ideal-Outfits (ohne Kleiderschrank).
+// Wählt für eine Zone die Teile, die den Punktebedarf decken (Schichten von innen nach außen).
+// Höchstens ein Teil pro Rolle. Unterschichten und Zusätze nie ohne Außenteil.
+// Hat man kein Außenteil für die Zone, kommen alle in Frage - als "nicht im Kleiderschrank".
+export function selectZone(zone, need, wardrobe) {
+  const owned = (role) => itemsOf(zone, role).filter((name) => wardrobe.has(name));
+  const outers = owned("outer").length ? owned("outer") : itemsOf(zone, "outer");
+  let best = null;
+  for (const outer of outers) {
+    for (const base of [null, ...owned("base")]) {
+      for (const mid of [null, ...owned("mid")]) {
+        const items = [base, mid, outer].filter(Boolean);
+        const points = pointsOf(items);
+        const candidate = { items, points, enough: points >= need };
+        if (!best || isBetter(candidate, best)) best = candidate;
+      }
+    }
+  }
+  return best;
+}
+
+// Ideal-Outfit einer Kleidungsstufe mit dem typischen Kleiderschrank: { head: [...], torso: [...], ... }
+// Teile, die nur optional wären (Bedarf 0 am Kopf), zählen nicht.
+export function idealOutfit(level) {
+  const outfit = {};
+  for (const zone of ZONES) {
+    const need = ZONE_NEEDS[zone.key][level - 1];
+    outfit[zone.key] = need === 0 && zone.key === "head"
+      ? [] : selectZone(zone.key, need, REFERENCE_WARDROBE).items;
+  }
+  return outfit;
+}
+
+// Was ändert sich zwischen zwei Kleidungsstufen? Vergleicht die Ideal-Outfits (ohne eigenen Kleiderschrank).
 // Ergebnis: nur Zonen mit Änderung, z. B. { zone: "hands", added: ["Winterhandschuhe"], removed: ["Sommerhandschuhe"] }
 export function compareOutfits(fromLevel, toLevel) {
+  const from = idealOutfit(fromLevel);
+  const to = idealOutfit(toLevel);
   return ZONES.map((zone) => {
-    const before = OUTFITS[fromLevel][zone.key];
-    const after = OUTFITS[toLevel][zone.key];
+    const before = from[zone.key];
+    const after = to[zone.key];
     return {
       zone: zone.key,
       added: after.filter((item) => !before.includes(item)),
@@ -322,20 +320,28 @@ export function compareOutfits(fromLevel, toLevel) {
 
 export function recommendOutfit(coldest, sensitivity, wardrobe, rainExpected, change, alwaysGear) {
   const level = getClothingLevel(coldest, sensitivity);
-  const gearOptional = !alwaysGear && level <= GEAR_OPTIONAL_UP_TO_LEVEL;
 
   const zones = ZONES.map((zone) => {
-    const layers = [];
-    for (const item of OUTFITS[level][zone.key]) {
-      const picked = pickFromWardrobe(item, wardrobe);
-      if (!picked) continue;
-      if (layers.some((layer) => layer.name === picked.name)) continue;
-      layers.push({ name: picked.name, warmth: CATALOG[picked.name][2], missing: picked.missing });
+    const need = ZONE_NEEDS[zone.key][level - 1];
+    const pick = selectZone(zone.key, need, wardrobe);
+    let layers = pick.items.map((name) => ({ name, warmth: CATALOG[name][2], missing: !wardrobe.has(name) }));
+    let noGear = false;
+
+    if (need === 0 && GEAR_ZONES.includes(zone.key)) {
+      // Kein Wärmebedarf: Schutzkleidung empfehlen - oder, wenn nicht gewünscht, nur optional
+      if (!alwaysGear) {
+        noGear = true;
+        layers.forEach((layer) => { layer.optional = true; });
+      }
+    } else if (need === 0) {
+      // Kopf ohne Wärmebedarf: Sturmhaube nur als optionaler Tipp, wenn man eine hat
+      layers = layers.filter((layer) => !layer.missing);
+      layers.forEach((layer) => { layer.optional = true; });
     }
-    // Ohne Schutzkleidung bei Wärme: Teile bleiben als "optional" sichtbar, die Zone gilt als "keine Schutzkleidung"
-    const noGear = gearOptional && GEAR_ZONES.includes(zone.key);
-    if (noGear) layers.forEach((layer) => { layer.optional = true; });
-    return { key: zone.key, name: zone.name, layers, noGear };
+
+    // Reicht der Kleiderschrank nicht für den Bedarf? (Kopf ist eher optional, dort kein Hinweis)
+    const tooCold = !pick.enough && zone.key !== "head";
+    return { key: zone.key, name: zone.name, layers, noGear, tooCold, need, points: pick.points };
   });
 
   const rainGear = rainExpected ? { name: RAIN_GEAR, missing: !wardrobe.has(RAIN_GEAR) } : null;
