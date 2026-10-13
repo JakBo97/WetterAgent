@@ -3,12 +3,13 @@
 // Baut die Seiten, reagiert auf Tippen und Regler, speichert Einstellungen.
 // =====================================================================
 
-import { fetchWeather, parseCurrent, parseHourly, getGpsPosition, getPlaceName, searchPlaces } from "./data.js";
+// Versionsnummer (?v=...) gleich halten wie in index.html (Cache-Busting).
+import { fetchWeather, parseCurrent, parseHourly, getGpsPosition, getPlaceName, searchPlaces } from "./data.js?v=1";
 import {
   buildQuickCheck, getRidingTemperature, getFeelBand, getClothingLevel, pickFromWardrobe,
   FEEL_BANDS, OUTFITS, CATALOG, ZONES, RAIN_GEAR_ALL, GUSTS_STRONG,
-} from "./logic.js";
-import { t, itemName, setLanguage, guessLanguage, LANGUAGES } from "./i18n.js";
+} from "./logic.js?v=1";
+import { t, itemName, setLanguage, guessLanguage, LANGUAGES } from "./i18n.js?v=1";
 
 // ---------------------------------------------------------------------
 // Einstellungen (im Speicher des Handys)

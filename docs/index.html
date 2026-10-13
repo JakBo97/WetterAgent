@@ -18,10 +18,13 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600;700&display=swap">
-  <link rel="stylesheet" href="style.css">
+  <!-- Versionsnummer (?v=...) bei jedem Update erhöhen, damit Browser und iPhone
+       die neuen Dateien laden statt der alten aus dem Cache.
+       Dieselbe Nummer steht auch bei den imports oben in js/app.js. -->
+  <link rel="stylesheet" href="style.css?v=1">
 </head>
 <body>
   <div id="app"></div>
-  <script type="module" src="js/app.js"></script>
+  <script type="module" src="js/app.js?v=1"></script>
 </body>
 </html>
