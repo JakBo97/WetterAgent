@@ -14,6 +14,7 @@ const VARIABLES = {
   windGusts: "wind_gusts_10m",
   precipitation: "precipitation",
   weatherCode: "weather_code",
+  radiation: "shortwave_radiation",   // Sonneneinstrahlung in W/m² (für die Fahrtemperatur)
 };
 
 // Nur stündlich

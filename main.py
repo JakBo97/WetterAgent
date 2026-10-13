@@ -232,6 +232,8 @@ def parse_hourly(raw):
 
 def get_riding_temperature(temperature):
     """Schätzt, wie kalt es sich auf dem Motorrad anfühlt (Fahrtwind)."""
+    # HINWEIS: Alte Formel. Die Web-App (docs/js/logic.js, getRidingBreakdown) rechnet inzwischen
+    # zusätzlich mit Wetterwind, Sonne und Regen und ist über 10 °C genauer. Vorerst bleibt es hier so.
     v = _AVERAGE_RIDING_SPEED_KMH ** 0.16
     wind_chill = 13.12 + 0.6215 * temperature - 11.37 * v + 0.3965 * temperature * v
 

@@ -5,8 +5,20 @@
 // =====================================================================
 
 // Interne Annahmen
-const AVERAGE_RIDING_SPEED_KMH = 60;
+const AVERAGE_RIDING_SPEED_KMH = 60;   // bleibt, keine Nutzereinstellung
 export const TIMELINE_HOURS = 8;
+
+// Fahrtemperatur (siehe getRidingBreakdown)
+const WIND_HEIGHT_FACTOR = 0.67;       // Wind in 10 m Höhe -> Wind auf Fahrerhöhe
+const SKIN_TEMP = 33;                  // ab hier kühlt Fahrtwind nicht mehr
+const WINDCHILL_MAX_TEMP = 10;         // Gültigkeitsgrenze der Windchill-Formel
+const HEAT_WIND_MAX_BONUS = 2;         // max. Erwärmung durch heißen Fahrtwind
+const SUN_ABSORB_FACTOR = 0.25;        // Anteil der Sonneneinstrahlung, der beim Fahrer ankommt
+const SUN_MAX_BONUS = 4;               // Obergrenze Sonne in °C
+const RAIN_LIGHT_MM = 0.1;             // ab leichtem Regen (mm/h) ...
+const RAIN_LIGHT_PENALTY = 2;          // ... 2 °C kälter
+const RAIN_MODERATE_MM = 2;            // ab mäßigem Regen (mm/h) ...
+const RAIN_MODERATE_PENALTY = 3;       // ... 3 °C kälter
 
 // Schwellenwerte
 const RAIN_PROB_HIGH = 60;
@@ -99,11 +111,52 @@ export const GEAR_ZONES = ["torso", "legs", "hands"];
 // Temperatur
 // ---------------------------------------------------------------------
 
-export function getRidingTemperature(temperature) {
-  const v = AVERAGE_RIDING_SPEED_KMH ** 0.16;
-  const windChill = 13.12 + 0.6215 * temperature - 11.37 * v + 0.3965 * temperature * v;
-  // Fahrtwind kann es nur kälter machen, nicht wärmer
-  return Math.round(Math.min(temperature, windChill) * 10) / 10;
+// Windchill-Formel (JAG/TI) der Wetterdienste, offiziell nur bis 10 °C definiert
+function windchill(temperature, speedKmh) {
+  const v = speedKmh ** 0.16;
+  return 13.12 + 0.6215 * temperature - 11.37 * v + 0.3965 * temperature * v;
+}
+
+// Gefühlte Temperatur auf dem Motorrad, in ihre Einzelteile zerlegt.
+// Bekommt ein Wetter-Objekt (jetzt oder eine Stunde) mit temperature, windSpeed, radiation, precipitation.
+// Ergebnis: { air, wind, sun, rain, riding } - wind, sun, rain als Veränderung in °C (z. B. wind: -2.8)
+export function getRidingBreakdown({ temperature, windSpeed, radiation, precipitation }) {
+  // 1. Effektiver Fahrtwind: Fahrgeschwindigkeit plus Wetterwind auf Fahrerhöhe
+  const weatherWind = WIND_HEIGHT_FACTOR * (windSpeed || 0);
+  const speed = Math.sqrt(AVERAGE_RIDING_SPEED_KMH ** 2 + weatherWind ** 2);
+
+  // 2. Fahrtwind-Effekt: bis 10 °C Windchill, darüber schwächer bis zur Hauttemperatur,
+  //    über 33 °C wärmt der heiße Fahrtwind leicht (höchstens HEAT_WIND_MAX_BONUS)
+  let cooling;
+  if (temperature <= WINDCHILL_MAX_TEMP) {
+    cooling = Math.max(0, temperature - windchill(temperature, speed));
+  } else {
+    const coolingAtLimit = WINDCHILL_MAX_TEMP - windchill(WINDCHILL_MAX_TEMP, speed);
+    cooling = coolingAtLimit * (SKIN_TEMP - temperature) / (SKIN_TEMP - WINDCHILL_MAX_TEMP);
+    cooling = Math.max(cooling, -HEAT_WIND_MAX_BONUS);
+  }
+  const wind = -cooling;
+
+  // 3. Sonne: wärmt, beim Fahren aber weniger, weil der Fahrtwind die Wärme wegträgt
+  let sun = 0;
+  if (radiation) {
+    const speedMs = speed / 3.6;
+    const absorbed = SUN_ABSORB_FACTOR * radiation;
+    sun = Math.min(SUN_MAX_BONUS, 0.70 * absorbed / (speedMs + 10));
+  }
+
+  // 4. Regen: Nässe kühlt zusätzlich
+  let rain = 0;
+  if (precipitation >= RAIN_MODERATE_MM) rain = -RAIN_MODERATE_PENALTY;
+  else if (precipitation >= RAIN_LIGHT_MM) rain = -RAIN_LIGHT_PENALTY;
+
+  // 5. Alles zusammen, auf eine Nachkommastelle
+  const riding = Math.round((temperature + wind + sun + rain) * 10) / 10;
+  return { air: temperature, wind, sun, rain, riding };
+}
+
+export function getRidingTemperature(weather) {
+  return getRidingBreakdown(weather).riding;
 }
 
 export function getFeelBand(ridingTemperature) {
@@ -157,7 +210,8 @@ function findHourIndex(hours, time) {
 // ---------------------------------------------------------------------
 
 export function analyzeNow(current, hours, now) {
-  const riding = getRidingTemperature(current.temperature);
+  const breakdown = getRidingBreakdown(current);
+  const riding = breakdown.riding;
   const index = findHourIndex(hours, now);
 
   // Bis wann bleibt es glatt? (für den Hinweis "bis ca. 9 Uhr")
@@ -172,6 +226,7 @@ export function analyzeNow(current, hours, now) {
 
   return {
     ridingTemperature: riding,
+    breakdown,              // Einzelteile für das Info-Fenster
     airTemperature: current.temperature,
     band: getFeelBand(riding),
     ice,
@@ -194,7 +249,7 @@ export function analyzeRide(current, hours, now, rideHours) {
     if (hour.time >= firstHour && hour.time < lastHour) {
       timeline.push({
         time: hour.time,
-        ridingTemperature: getRidingTemperature(hour.temperature),
+        ridingTemperature: getRidingTemperature(hour),
         rainProbability: hour.rainProbability,
         gusts: hour.windGusts,
         ice: isIcy(hours, i),
@@ -205,7 +260,7 @@ export function analyzeRide(current, hours, now, rideHours) {
 
   const rideList = timeline.filter((point) => point.inRide);
 
-  const temperatures = [getRidingTemperature(current.temperature),
+  const temperatures = [getRidingTemperature(current),
     ...rideList.map((p) => p.ridingTemperature)];
   const change = temperatures[temperatures.length - 1] - temperatures[0];
   const coldest = Math.min(...temperatures);

@@ -40,6 +40,8 @@ nie fertige Sätze. Alle Texte kommen aus `i18n.js` über `t("schluessel")` bzw.
 Neue Texte immer in **beiden** Sprachen anlegen.
 
 `main.py` ist der ursprüngliche Prototyp. Die Web-App ist inzwischen das Hauptprodukt.
+`main.py` rechnet die Fahrtemperatur noch mit der alten Formel (nur Windchill) und hat noch den alten
+Kleidungskatalog ohne Punktesystem.
 Wenn sich Regeln in `logic.js` ändern, sag Bescheid, ob `main.py` nachgezogen werden soll.
 
 ## Datenquellen
@@ -52,9 +54,18 @@ Wenn sich Regeln in `logic.js` ändern, sag Bescheid, ob `main.py` nachgezogen w
 
 ## Fachliche Regeln
 
-- **Fahrtemperatur** = Lufttemperatur + Fahrtwind über die Windchill-Formel mit fester
-  Durchschnittsgeschwindigkeit 60 km/h (`AVERAGE_RIDING_SPEED_KMH`). Die Geschwindigkeit ist
-  bewusst **keine** Nutzereinstellung. Fahrtwind macht es nur kälter, nie wärmer (`min()`).
+- **Fahrtemperatur** (`getRidingBreakdown` in `logic.js`) = Luft + Fahrtwind + Sonne + Regen.
+  Gibt `{ air, wind, sun, rain, riding }` zurück; `getRidingTemperature` liefert nur `riding`.
+  Bekommt immer das ganze Wetter-Objekt (jetzt oder Stunde), nicht nur die Temperatur.
+  - **Fahrtwind**: feste 60 km/h (`AVERAGE_RIDING_SPEED_KMH`, bewusst **keine** Nutzereinstellung),
+    plus Wetterwind auf Fahrerhöhe (`WIND_HEIGHT_FACTOR` 0,67): `vEff = √(60² + (0,67·Wind)²)`.
+    Bis 10 °C (`WINDCHILL_MAX_TEMP`) Windchill-Formel (JAG/TI); darüber wird die Kühlung bei 10 °C
+    linear bis 0 bei `SKIN_TEMP` 33 °C kleiner, darüber wärmt der Fahrtwind, höchstens +2 °C
+    (`HEAT_WIND_MAX_BONUS`).
+  - **Sonne**: `shortwave_radiation`, `min(4, 0,70 · 0,25·Strahlung / (vEff/3,6 + 10))`
+    (`SUN_ABSORB_FACTOR`, `SUN_MAX_BONUS`).
+  - **Regen**: ab 0,1 mm/h −2 °C, ab 2 mm/h −3 °C (`RAIN_LIGHT_*`, `RAIN_MODERATE_*`).
+  - Ergebnis auf eine Nachkommastelle gerundet.
 - Die Fahrtemperatur ist ein **objektiver Wert** und für alle Fahrer gleich.
 - **Kälteempfinden** (Stufe 1 friert schnell … 3 normal … 5 friert nie) verschiebt **nur die
   Kleidungsstufe** (±1/±2), niemals die angezeigte Temperatur.
@@ -134,6 +145,5 @@ Weitere Festlegungen:
 ## Offene Ideen
 
 - **iPhone-Widget** für den Jetzt-Block über die App Scriptable; Antippen öffnet die Web-App.
-- Windchill-Formel ist eigentlich nur bis ca. 10 °C definiert; Berechnung bei warmen Temperaturen überdenken.
 - Kleiderschrank verfeinern (z. B. dünne/dicke Socken, Heizweste, Heizgriffe in der Logik nutzen).
 - Später vielleicht: Planungsmodus für andere Startzeiten oder Tage.

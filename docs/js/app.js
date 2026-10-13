@@ -4,12 +4,12 @@
 // =====================================================================
 
 // Versionsnummer (?v=...) gleich halten wie in index.html (Cache-Busting).
-import { fetchWeather, parseCurrent, parseHourly, getGpsPosition, getPlaceName, searchPlaces } from "./data.js?v=5";
+import { fetchWeather, parseCurrent, parseHourly, getGpsPosition, getPlaceName, searchPlaces } from "./data.js?v=6";
 import {
   buildQuickCheck, getRidingTemperature, getFeelBand, getClothingLevel, compareOutfits, idealOutfit,
   FEEL_BANDS, CATALOG, ZONES, RAIN_GEAR, GUSTS_STRONG,
-} from "./logic.js?v=5";
-import { t, itemName, setLanguage, LANGUAGES } from "./i18n.js?v=5";
+} from "./logic.js?v=6";
+import { t, itemName, setLanguage, LANGUAGES } from "./i18n.js?v=6";
 
 // ---------------------------------------------------------------------
 // Einstellungen (im Speicher des Handys)
@@ -119,6 +119,8 @@ const ICONS = {
   check: '<path d="M5 12.5l4.5 4.5L19 7.5"></path>',
   chevronDown: '<path d="M6 9l6 6 6-6"></path>',
   chevronLeft: '<path d="M15 6l-6 6 6 6"></path>',
+  info: '<circle cx="12" cy="12" r="9"></circle><line x1="12" y1="11" x2="12" y2="16.5"></line><line x1="12" y1="7.6" x2="12" y2="7.61"></line>',
+  close: '<line x1="6" y1="6" x2="18" y2="18"></line><line x1="18" y1="6" x2="6" y2="18"></line>',
   thermometer: '<path d="M14 14.8V4.5a2 2 0 0 0-4 0v10.3a4 4 0 1 0 4 0z"></path>',
   globe: '<circle cx="12" cy="12" r="9"></circle><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"></path>',
   head: '<circle cx="12" cy="9" r="5.5"></circle><path d="M7 21v-2.5a5 5 0 0 1 10 0V21"></path>',
@@ -326,6 +328,7 @@ function renderHero(check) {
     <div class="hero-top">
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
         <span class="now-badge"><span class="live-dot" aria-hidden="true"></span>${t("now")}</span><span class="hero-caption">${t("feltOnBike")}</span>
+        <button class="info-button" data-action="open-info" aria-label="${t("infoButton")}">${icon("info", 18, "currentColor", 2)}</button>
       </div>
       <div class="air-badge"><small>${t("outside")}</small><strong>${deg(now.airTemperature)}°</strong></div>
     </div>
@@ -543,7 +546,7 @@ function closeSettings() {
 
 function renderExample(draft) {
   // Beispiel mit der aktuellen Fahrtemperatur (oder 10 °C, solange kein Wetter da ist)
-  const riding = state.weather ? getRidingTemperature(shownWeather().current.temperature) : 10;
+  const riding = state.weather ? getRidingTemperature(shownWeather().current) : 10;
   const baseLevel = getClothingLevel(riding, 3);
   const level = getClothingLevel(riding, draft.sensitivity);
   const named = (name) => `<span class="dot w${CATALOG[name][2]}"></span>${escapeHtml(itemName(name))}`;
@@ -735,6 +738,7 @@ app.addEventListener("click", (event) => {
     state.draft.wardrobe = [...set];
     renderSettings();
   }
+  if (action === "open-info") openInfo(target);
   if (action === "set-test-temperature") {
     const value = target.dataset.temperature;
     state.testTemperature = value === "" ? null : Number(value);
@@ -747,6 +751,78 @@ app.addEventListener("click", (event) => {
     renderSettings();
   }
   if (action === "save-settings") saveAndClose();
+});
+
+// ---------------------------------------------------------------------
+// Info-Fenster: So wird die Fahrtemperatur berechnet
+// Liegt außerhalb von #app, damit es offen bleibt, wenn die Seite neu gezeichnet wird.
+// ---------------------------------------------------------------------
+
+const modalRoot = document.createElement("div");
+document.body.appendChild(modalRoot);
+let modalReturnFocus = null;
+
+// Zahl mit höchstens einer Nachkommastelle, im Deutschen mit Komma; "sign" zeigt auch das Plus
+function formatDegrees(value, sign = false) {
+  const rounded = Math.round(value * 10) / 10;
+  if (rounded === 0) return "0 °C";
+  let text = Number.isInteger(rounded) ? String(Math.abs(rounded)) : Math.abs(rounded).toFixed(1);
+  if (state.settings.language === "de") text = text.replace(".", ",");
+  const prefix = rounded < 0 ? "−" : (sign ? "+" : "");
+  return `${prefix}${text} °C`;
+}
+
+function openInfo(trigger) {
+  const breakdown = currentCheck().now.breakdown;
+  const labels = t("breakdownRows");
+  const row = (key, value, sign) => {
+    const zero = Math.round(value * 10) / 10 === 0;
+    return `<div class="breakdown-row ${zero ? "zero" : ""}"><span>${labels[key]}</span><span>${formatDegrees(value, sign)}</span></div>`;
+  };
+  const parts = t("infoParts").map(([title, text]) => `<p><strong>${title}</strong> – ${text}</p>`).join("");
+
+  modalRoot.innerHTML = `<div class="modal-backdrop" data-modal="backdrop">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="info-title">
+      <div class="modal-head">
+        <h2 class="modal-title" id="info-title">${t("infoTitle")}</h2>
+        <button class="icon-button" data-modal="close" aria-label="${t("close")}">${icon("close", 20, "currentColor", 2.2)}</button>
+      </div>
+      <p>${t("infoIntro")}</p>
+      ${parts}
+      <p>${t("infoSame")}</p>
+      <p class="hint-text">${t("infoNote")}</p>
+      <div class="breakdown">
+        <div class="label-small">${t("breakdownTitle")}</div>
+        ${row("air", breakdown.air, false)}
+        ${row("wind", breakdown.wind, true)}
+        ${row("sun", breakdown.sun, true)}
+        ${row("rain", breakdown.rain, true)}
+        <div class="breakdown-row total"><span>${labels.riding}</span><span>${formatDegrees(breakdown.riding)}</span></div>
+      </div>
+    </div></div>`;
+  modalReturnFocus = trigger;
+  document.body.style.overflow = "hidden"; // Seite dahinter nicht mitscrollen
+  modalRoot.querySelector('[data-modal="close"]').focus();
+}
+
+function closeInfo() {
+  if (!modalRoot.innerHTML) return;
+  modalRoot.innerHTML = "";
+  document.body.style.overflow = "";
+  // Fokus zurück auf den Info-Button (falls die Seite inzwischen neu gezeichnet wurde: den neuen)
+  const button = modalReturnFocus && document.contains(modalReturnFocus)
+    ? modalReturnFocus : app.querySelector('[data-action="open-info"]');
+  if (button) button.focus();
+  modalReturnFocus = null;
+}
+
+modalRoot.addEventListener("click", (event) => {
+  // Tippen auf den abgedunkelten Hintergrund (nicht auf die Karte) oder auf X schließt
+  if (event.target.dataset.modal === "backdrop" || event.target.closest('[data-modal="close"]')) closeInfo();
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") closeInfo();
 });
 
 app.addEventListener("submit", (event) => {
