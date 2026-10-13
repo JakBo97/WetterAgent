@@ -4,12 +4,12 @@
 // =====================================================================
 
 // Versionsnummer (?v=...) gleich halten wie in index.html (Cache-Busting).
-import { fetchWeather, parseCurrent, parseHourly, getGpsPosition, getPlaceName, searchPlaces } from "./data.js?v=3";
+import { fetchWeather, parseCurrent, parseHourly, getGpsPosition, getPlaceName, searchPlaces } from "./data.js?v=4";
 import {
   buildQuickCheck, getRidingTemperature, getFeelBand, getClothingLevel, compareOutfits,
-  FEEL_BANDS, OUTFITS, CATALOG, ZONES, RAIN_GEAR, REQUIRED_ITEMS, GUSTS_STRONG,
-} from "./logic.js?v=3";
-import { t, itemName, setLanguage, LANGUAGES } from "./i18n.js?v=3";
+  FEEL_BANDS, OUTFITS, CATALOG, ZONES, RAIN_GEAR, GUSTS_STRONG,
+} from "./logic.js?v=4";
+import { t, itemName, setLanguage, LANGUAGES } from "./i18n.js?v=4";
 
 // ---------------------------------------------------------------------
 // Einstellungen (im Speicher des Handys)
@@ -26,10 +26,14 @@ const DEFAULT_SETTINGS = {
   onboarded: false,
   language: "en",         // Standard Englisch, Deutsch muss man aktiv wählen
   sensitivity: 3,
-  wardrobe: [...REQUIRED_ITEMS], // beim ersten Öffnen nur der Mindestbestand
+  wardrobe: ["Textiljacke", "Textilhose"], // beim ersten Öffnen nur Jacke und Hose ausgewählt
+  alwaysGear: true,       // immer mit Schutzkleidung (Jacke, Hose, Handschuhe)
   useGps: true,
   manualPlace: { name: "Freising", region: "Bayern, Deutschland", latitude: 48.40, longitude: 11.74 },
 };
+
+// Alte Namen aus früheren Versionen -> neue Namen
+const RENAMED_ITEMS = { "Motorradjacke": "Textiljacke", "Motorradhose": "Textilhose" };
 
 function loadSettings() {
   let settings;
@@ -39,10 +43,10 @@ function loadSettings() {
   } catch {
     settings = { ...DEFAULT_SETTINGS };
   }
-  // Teile, die es in der App nicht mehr gibt, aussortieren; Mindestbestand immer dazu
+  // Umbenannte Teile übernehmen, Teile, die es nicht mehr gibt, aussortieren
   const list = Array.isArray(settings.wardrobe) ? settings.wardrobe : [];
-  const known = list.filter((name) => CATALOG[name] || name === RAIN_GEAR);
-  settings.wardrobe = [...new Set([...REQUIRED_ITEMS, ...known])];
+  const renamed = list.map((name) => RENAMED_ITEMS[name] || name);
+  settings.wardrobe = [...new Set(renamed.filter((name) => CATALOG[name] || name === RAIN_GEAR))];
   return settings;
 }
 
@@ -112,7 +116,6 @@ const ICONS = {
   drop: '<path d="M12 3.5c3 4 5.5 7 5.5 10a5.5 5.5 0 0 1-11 0c0-3 2.5-6 5.5-10z"></path>',
   warning: '<path d="M12 3l9.5 17h-19z"></path><line x1="12" y1="10" x2="12" y2="14"></line><line x1="12" y1="17" x2="12" y2="17.01"></line>',
   check: '<path d="M5 12.5l4.5 4.5L19 7.5"></path>',
-  lock: '<rect x="5" y="11" width="14" height="10" rx="2"></rect><path d="M8 11V7.5a4 4 0 0 1 8 0V11"></path>',
   chevronDown: '<path d="M6 9l6 6 6-6"></path>',
   chevronLeft: '<path d="M15 6l-6 6 6 6"></path>',
   thermometer: '<path d="M14 14.8V4.5a2 2 0 0 0-4 0v10.3a4 4 0 1 0 4 0z"></path>',
@@ -172,7 +175,7 @@ async function loadWeather() {
 function currentCheck() {
   const { current, hours } = state.weather;
   return buildQuickCheck(current, hours, new Date(), state.rideHours,
-    state.settings.sensitivity, new Set(state.settings.wardrobe));
+    state.settings.sensitivity, new Set(state.settings.wardrobe), state.settings.alwaysGear);
 }
 
 function renderHome() {
@@ -413,10 +416,16 @@ function renderOutfit(check) {
     const canOpen = layers.length > 0;
     const open = canOpen && state.openZone === zone.key;
     const outer = layers[layers.length - 1];
-    const strip = (layers.length ? layers : [null]).map((l) => `<i class="${l ? `w${l.warmth}` : ""}"></i>`).join("");
+    let strip = (layers.length ? layers : [null]).map((l) => `<i class="${l ? `w${l.warmth}` : ""}"></i>`).join("");
+    let itemText = outer ? escapeHtml(itemName(outer.name)) : t("nothingExtra");
 
     let meta = "";
-    if (layers.length > 1) {
+    if (zone.noGear) {
+      // Ohne Schutzkleidung bei Wärme: Teile stehen nur aufgeklappt als "optional"
+      itemText = t("noGear");
+      meta = `<span class="muted">${t("gearRecommended")}</span>`;
+      strip = "<i></i>";
+    } else if (layers.length > 1) {
       const n = layers.length - 1;
       // Fehlt das Außenteil im Kleiderschrank, steht der Hinweis direkt auf der Kachel
       meta = `<span class="more-badge">+${n}</span><span>${outer.missing ? t("notOwned") : t("layersBelow", n)}</span>`;
@@ -425,7 +434,7 @@ function renderOutfit(check) {
     }
 
     const inner = `<span class="tile-zone">${icon(zone.key, 22, "#C3C7CD")}${t("zones")[zone.key]}</span>
-      <span class="tile-item ${layers.length ? "" : "empty"}">${outer ? escapeHtml(itemName(outer.name)) : t("nothingExtra")}</span>
+      <span class="tile-item ${layers.length && !zone.noGear ? "" : "empty"}">${itemText}</span>
       <span class="tile-meta">${meta}</span>
       <span class="strip">${strip}</span>`;
 
@@ -454,7 +463,7 @@ function renderOutfit(check) {
   if (openZone) {
     const rows = [...openZone.layers].reverse().map((l) => `<div class="layer">
       <span class="swatch w${l.warmth}"></span>
-      <span class="name">${escapeHtml(itemName(l.name))}${l.missing ? ` <small class="muted">(${t("notOwned")})</small>` : ""}</span>
+      <span class="name">${escapeHtml(itemName(l.name))}${l.optional ? ` <small class="muted">(${t("optional")})</small>` : ""}${l.missing ? ` <small class="muted">(${t("notOwned")})</small>` : ""}</span>
       <span class="word w${l.warmth}">${warmth[l.warmth]}</span></div>`).join("");
     const heading = openZone.layers.length > 1 ? `${t("zones")[openZone.key]} · ${t("outsideIn")}` : t("zones")[openZone.key];
     detail = `<div class="layer-detail"><div class="label-small">${heading}</div>${rows}</div>`;
@@ -554,11 +563,7 @@ function renderSettings() {
 
   const groups = WARDROBE_GROUPS.map((group) => {
     const count = group.items.filter((it) => wardrobe.has(it.name)).length;
-    const chips = group.items.map((it) => REQUIRED_ITEMS.includes(it.name)
-      // Mindestbestand: immer an, mit Schloss, ohne data-action (lässt sich nicht abwählen)
-      ? `<button class="chip required" aria-pressed="true" aria-disabled="true">
-      <span class="dot w${it.warmth}"></span>${escapeHtml(itemName(it.name))}${icon("lock", 14, "var(--brand)", 2.4)}<span class="visually-hidden"> (${t("alwaysIncluded")})</span></button>`
-      : `<button class="chip" data-action="toggle-item" data-item="${escapeHtml(it.name)}" aria-pressed="${wardrobe.has(it.name)}">
+    const chips = group.items.map((it) => `<button class="chip" data-action="toggle-item" data-item="${escapeHtml(it.name)}" aria-pressed="${wardrobe.has(it.name)}">
       <span class="dot w${it.warmth}"></span>${escapeHtml(itemName(it.name))}${wardrobe.has(it.name) ? icon("check", 14, "#F4F1EA", 3) : ""}</button>`).join("");
     const groupIcon = group.key === "rain" ? icon("drop", 20, "var(--rain)") : icon(group.key, 20, "#C3C7CD");
     return `<div class="category">
@@ -618,7 +623,11 @@ function renderSettings() {
       <div class="outfit-head"><div class="eyebrow">${icon("torso", 16, "currentColor", 2)}${t("wardrobe")}</div><div class="hint-text">${t("selected", draft.wardrobe.length)}</div></div>
       <div class="question">${t("whatDoYouOwn")}</div>
       <div class="hint-text" style="margin-top:-6px">${t("wardrobeHint")}</div>
-      <div class="hint-text required-hint">${icon("lock", 14, "var(--brand)", 2.4)}${t("requiredHint")}</div>
+      <div class="switch-row">
+        <div><div class="question">${t("alwaysGear")}</div>
+        <div class="hint-text">${draft.alwaysGear ? t("alwaysGearOn") : t("alwaysGearOff")}</div></div>
+        <button class="switch" data-action="toggle-gear" aria-pressed="${draft.alwaysGear}" aria-label="${t("alwaysGear")}"></button>
+      </div>
       ${groups}
       <div class="legend" style="padding-top:10px;border-top:1px solid var(--card-border)">
         <span><i class="w1"></i>${warmth[1]}</span><span><i class="w2"></i>${warmth[2]}</span><span><i class="w3"></i>${warmth[3]}</span><span><i class="w0"></i>${warmth[0]}</span>
@@ -692,13 +701,13 @@ app.addEventListener("click", (event) => {
   if (action === "set-level") { state.draft.sensitivity = Number(target.dataset.level); renderSettings(); }
   if (action === "toggle-item") {
     const name = target.dataset.item;
-    if (REQUIRED_ITEMS.includes(name)) return; // Mindestbestand bleibt immer drin
     const set = new Set(state.draft.wardrobe);
     if (set.has(name)) set.delete(name); else set.add(name);
     state.draft.wardrobe = [...set];
     renderSettings();
   }
   if (action === "toggle-gps") { state.draft.useGps = !state.draft.useGps; renderSettings(); }
+  if (action === "toggle-gear") { state.draft.alwaysGear = !state.draft.alwaysGear; renderSettings(); }
   if (action === "pick-place") {
     state.draft.manualPlace = state.search.results[Number(target.dataset.index)];
     renderSettings();

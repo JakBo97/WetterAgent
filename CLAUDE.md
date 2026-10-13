@@ -62,12 +62,16 @@ Wenn sich Regeln in `logic.js` ändern, sag Bescheid, ob `main.py` nachgezogen w
   Kleidungsstufen 1–5, Outfits in `OUTFITS`, Teile mit Zone/Rolle/Wärme in `CATALOG`.
 - **Kleiderschrank**: Empfohlen wird nur, was man besitzt. Fehlt ein Teil, wird der beste Ersatz
   gleicher Zone und Rolle gewählt; fehlt ein Außenteil ganz, wird es mit "nicht im Kleiderschrank" angezeigt.
-  Außer beim Mindestbestand darf jede Zone leer sein.
-- **Mindestbestand** (`REQUIRED_ITEMS`): Motorradjacke und Motorradhose. Immer ausgewählt, nicht
-  abwählbar. Beim ersten Öffnen ist nur der Mindestbestand ausgewählt, alles andere aus.
-  Teile, die es nicht mehr gibt, werden beim Laden der Einstellungen aussortiert.
-- **Katalog bewusst schlank**: Kopf nur Halstuch/Sturmhaube, kein T-Shirt, eine Motorradjacke (kein Futter-Unterschied),
-  Handschuhe nur Sommer/Winter, Regen nur Regenkombi.
+  Jede Zone darf im Kleiderschrank leer sein. Beim ersten Öffnen sind nur Textiljacke und Textilhose
+  ausgewählt (nicht gesperrt). Umbenannte Teile werden beim Laden übernommen (`RENAMED_ITEMS`),
+  Teile, die es nicht mehr gibt, aussortiert.
+- **Schutzkleidung** (Einstellung `alwaysGear`, Standard an): An = Jacke, Hose und Handschuhe werden
+  immer empfohlen. Aus = in den Zonen `GEAR_ZONES` steht bei Wärme (bis `GEAR_OPTIONAL_UP_TO_LEVEL`)
+  "Keine Schutzkleidung" + "Schutzkleidung empfohlen"; die Teile erscheinen aufgeklappt als "optional".
+  Ein T-Shirt o. Ä. kommt bewusst nicht in den Kleiderschrank.
+- **Katalog bewusst schlank**: Kopf nur Sturmhaube + Halstuch (Halstuch nie allein, nur als Zusatz zur
+  Sturmhaube, wenn es sehr kalt ist), kein T-Shirt, Jacke und Hose je als Textil
+  oder Leder (kein Futter-Unterschied), Handschuhe nur Sommer/Winter, keine Winterstiefel.
 - **Mindestanforderung**: Unterschichten (Thermohose, Thermosocken, Thermo-Shirt …) nie ohne Außenteil
   der gleichen Zone. Jede Zone in `OUTFITS` mit Inhalt braucht ein Außenteil (wird beim Laden geprüft).
 - **Wärmestufen** der Kleidung: 1 leicht, 2 warm, 3 winterfest (0 = Regen).
@@ -100,7 +104,7 @@ Weitere Festlegungen:
 - Einstellungen: Sprache (EN/DE, Standard Englisch; Deutsch wählt man aktiv), Standort (GPS an/aus + Ortssuche), Kälteempfinden mit
   Live-Beispiel bei aktueller Temperatur (bei "Normal" das ganze Ideal-Outfit, sonst nur die Unterschiede
   zu "Normal": + dazu, − weg, "X statt Y"; unabhängig vom Kleiderschrank), Kleiderschrank als An/Aus-Chips nach Zonen
-  (Mindestbestand mit orangem Rand und Schloss).
+  mit Schalter "Immer mit Schutzkleidung".
 - Ersteinrichtung = dieselbe Einstellungsseite mit "Los geht's" statt "Speichern".
 - Einstellungen liegen im `localStorage` (Schlüssel `motoweather.settings.v1`), immer in try/catch.
 - Touch-Ziele mindestens 44 px, Buttons sind echte `<button>`, Symbole haben `aria-hidden` oder `aria-label`.

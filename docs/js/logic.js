@@ -49,53 +49,55 @@ export const ZONES = [
 ];
 
 // Alle Teile, die die App kennt: Name -> [Zone, Rolle, Wärme]
-// Rolle: "base" = unten drunter, "mid" = Zwischenschicht, "outer" = außen
+// Rolle: "base" = unten drunter, "mid" = Zwischenschicht/Zusatz, "outer" = außen
 export const CATALOG = {
-  "Halstuch": ["head", "outer", 1],
+  "Halstuch": ["head", "mid", 1],     // nur als Zusatz zur Sturmhaube, nie allein
   "Sturmhaube": ["head", "outer", 2],
   "Langarm-Shirt": ["torso", "base", 1],
   "Thermo-Shirt": ["torso", "base", 2],
   "Pullover": ["torso", "mid", 2],
   "Heizweste": ["torso", "mid", 3],
-  "Motorradjacke": ["torso", "outer", 2],
+  "Textiljacke": ["torso", "outer", 2],
+  "Lederjacke": ["torso", "outer", 2],
   "Sommerhandschuhe": ["hands", "outer", 1],
   "Winterhandschuhe": ["hands", "outer", 3],
   "Thermohose": ["legs", "base", 2],
   "Motorradjeans": ["legs", "outer", 1],
-  "Motorradhose": ["legs", "outer", 2],
-  "Hose mit Futter": ["legs", "outer", 3],
+  "Textilhose": ["legs", "outer", 2],
+  "Lederhose": ["legs", "outer", 2],
   "Thermosocken": ["boots", "base", 2],
   "Motorrad-Sneaker": ["boots", "outer", 1],
   "Motorradstiefel": ["boots", "outer", 2],
-  "Winterstiefel": ["boots", "outer", 3],
 };
 
 export const RAIN_GEAR = "Regenkombi";
 
-// Mindestbestand: Diese Teile hat jeder Fahrer. Sie sind immer im Kleiderschrank
-// und lassen sich nicht abwählen.
-export const REQUIRED_ITEMS = ["Motorradjacke", "Motorradhose"];
+// Schutzkleidung: Zonen, deren Außenteil (Jacke, Hose, Handschuhe) vor allem schützt.
+// Fährt jemand nicht immer mit Schutzkleidung, sind sie nur optional, solange sie
+// nicht zum Wärmen gebraucht werden - das ist bis zu dieser Kleidungsstufe der Fall.
+export const GEAR_ZONES = ["torso", "legs", "hands"];
+const GEAR_OPTIONAL_UP_TO_LEVEL = 1;
 
 // Ideales Outfit je Kleidungsstufe, Schichten von innen nach außen
 export const OUTFITS = {
-  5: { head: ["Sturmhaube"], torso: ["Thermo-Shirt", "Pullover", "Motorradjacke"],
-       hands: ["Winterhandschuhe"], legs: ["Thermohose", "Hose mit Futter"],
-       boots: ["Thermosocken", "Winterstiefel"] },
-  4: { head: ["Sturmhaube"], torso: ["Thermo-Shirt", "Motorradjacke"],
-       hands: ["Winterhandschuhe"], legs: ["Thermohose", "Motorradhose"],
+  5: { head: ["Halstuch", "Sturmhaube"], torso: ["Thermo-Shirt", "Pullover", "Textiljacke"],
+       hands: ["Winterhandschuhe"], legs: ["Thermohose", "Textilhose"],
        boots: ["Thermosocken", "Motorradstiefel"] },
-  3: { head: ["Sturmhaube"], torso: ["Langarm-Shirt", "Motorradjacke"],
-       hands: ["Winterhandschuhe"], legs: ["Motorradhose"],
+  4: { head: ["Sturmhaube"], torso: ["Thermo-Shirt", "Textiljacke"],
+       hands: ["Winterhandschuhe"], legs: ["Thermohose", "Textilhose"],
+       boots: ["Thermosocken", "Motorradstiefel"] },
+  3: { head: ["Sturmhaube"], torso: ["Langarm-Shirt", "Textiljacke"],
+       hands: ["Winterhandschuhe"], legs: ["Textilhose"],
        boots: ["Motorradstiefel"] },
-  2: { head: ["Halstuch"], torso: ["Langarm-Shirt", "Motorradjacke"],
+  2: { head: [], torso: ["Langarm-Shirt", "Textiljacke"],
        hands: ["Sommerhandschuhe"], legs: ["Motorradjeans"],
        boots: ["Motorradstiefel"] },
-  1: { head: [], torso: ["Motorradjacke"],
+  1: { head: [], torso: ["Textiljacke"],
        hands: ["Sommerhandschuhe"], legs: ["Motorradjeans"],
        boots: ["Motorrad-Sneaker"] },
 };
 
-// Mindestanforderung: Unterschichten (z. B. Thermohose, Thermosocken) nie ohne Außenteil.
+// Mindestanforderung: Unterschichten (z. B. Thermohose, Thermosocken, Halstuch) nie ohne Außenteil.
 // Deshalb muss jede Zone eines Outfits, in der überhaupt etwas steht, ein Außenteil enthalten.
 // Das Außenteil wird immer angezeigt - notfalls als "nicht im Kleiderschrank" (pickFromWardrobe).
 // Diese Prüfung meldet sich in der Browser-Konsole, falls OUTFITS einmal falsch geändert wird.
@@ -305,7 +307,7 @@ export function pickFromWardrobe(item, wardrobe) {
 }
 
 // Was ändert sich zwischen zwei Kleidungsstufen? Vergleicht die Ideal-Outfits (ohne Kleiderschrank).
-// Ergebnis: nur Zonen mit Änderung, z. B. { zone: "legs", added: ["Hose mit Futter"], removed: ["Motorradhose"] }
+// Ergebnis: nur Zonen mit Änderung, z. B. { zone: "hands", added: ["Winterhandschuhe"], removed: ["Sommerhandschuhe"] }
 export function compareOutfits(fromLevel, toLevel) {
   return ZONES.map((zone) => {
     const before = OUTFITS[fromLevel][zone.key];
@@ -318,8 +320,9 @@ export function compareOutfits(fromLevel, toLevel) {
   }).filter((change) => change.added.length || change.removed.length);
 }
 
-export function recommendOutfit(coldest, sensitivity, wardrobe, rainExpected, change) {
+export function recommendOutfit(coldest, sensitivity, wardrobe, rainExpected, change, alwaysGear) {
   const level = getClothingLevel(coldest, sensitivity);
+  const gearOptional = !alwaysGear && level <= GEAR_OPTIONAL_UP_TO_LEVEL;
 
   const zones = ZONES.map((zone) => {
     const layers = [];
@@ -329,7 +332,10 @@ export function recommendOutfit(coldest, sensitivity, wardrobe, rainExpected, ch
       if (layers.some((layer) => layer.name === picked.name)) continue;
       layers.push({ name: picked.name, warmth: CATALOG[picked.name][2], missing: picked.missing });
     }
-    return { key: zone.key, name: zone.name, layers };
+    // Ohne Schutzkleidung bei Wärme: Teile bleiben als "optional" sichtbar, die Zone gilt als "keine Schutzkleidung"
+    const noGear = gearOptional && GEAR_ZONES.includes(zone.key);
+    if (noGear) layers.forEach((layer) => { layer.optional = true; });
+    return { key: zone.key, name: zone.name, layers, noGear };
   });
 
   const rainGear = rainExpected ? { name: RAIN_GEAR, missing: !wardrobe.has(RAIN_GEAR) } : null;
@@ -345,13 +351,13 @@ export function recommendOutfit(coldest, sensitivity, wardrobe, rainExpected, ch
 // Alles zusammen - der Inhalt der Startseite
 // ---------------------------------------------------------------------
 
-export function buildQuickCheck(current, hours, now, rideHours, sensitivity, wardrobe) {
+export function buildQuickCheck(current, hours, now, rideHours, sensitivity, wardrobe, alwaysGear) {
   const nowBlock = analyzeNow(current, hours, now);
   const ride = analyzeRide(current, hours, now, rideHours);
 
   // Ist es jetzt schon glatt, steht die Warnung oben - nicht doppelt im Fahrt-Block
   if (nowBlock.ice) ride.iceLater = null;
 
-  const outfit = recommendOutfit(ride.coldest, sensitivity, wardrobe, ride.rainExpected, ride.change);
+  const outfit = recommendOutfit(ride.coldest, sensitivity, wardrobe, ride.rainExpected, ride.change, alwaysGear);
   return { now: nowBlock, ride, outfit };
 }
