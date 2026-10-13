@@ -87,7 +87,7 @@ Weitere Festlegungen:
 - Dunkles Design, Schriften Barlow / Barlow Condensed.
 - Markenfarbe Race-Orange `#FF8A3D`. Temperaturfarben: eisblau → blau → türkis → grün → gelb → orange.
 - Regen immer blau, Wind immer lila, Glätte orange-gelb.
-- Einstellungen: Sprache (DE/EN), Standort (GPS an/aus + Ortssuche), Kälteempfinden mit
+- Einstellungen: Sprache (EN/DE, Standard Englisch; Deutsch wählt man aktiv), Standort (GPS an/aus + Ortssuche), Kälteempfinden mit
   Live-Beispiel bei aktueller Temperatur, Kleiderschrank als An/Aus-Chips nach Zonen.
 - Ersteinrichtung = dieselbe Einstellungsseite mit "Los geht's" statt "Speichern".
 - Einstellungen liegen im `localStorage` (Schlüssel `motoweather.settings.v1`), immer in try/catch.

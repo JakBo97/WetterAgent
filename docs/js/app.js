@@ -4,12 +4,12 @@
 // =====================================================================
 
 // Versionsnummer (?v=...) gleich halten wie in index.html (Cache-Busting).
-import { fetchWeather, parseCurrent, parseHourly, getGpsPosition, getPlaceName, searchPlaces } from "./data.js?v=1";
+import { fetchWeather, parseCurrent, parseHourly, getGpsPosition, getPlaceName, searchPlaces } from "./data.js?v=2";
 import {
   buildQuickCheck, getRidingTemperature, getFeelBand, getClothingLevel, pickFromWardrobe,
   FEEL_BANDS, OUTFITS, CATALOG, ZONES, RAIN_GEAR_ALL, GUSTS_STRONG,
-} from "./logic.js?v=1";
-import { t, itemName, setLanguage, guessLanguage, LANGUAGES } from "./i18n.js?v=1";
+} from "./logic.js?v=2";
+import { t, itemName, setLanguage, LANGUAGES } from "./i18n.js?v=2";
 
 // ---------------------------------------------------------------------
 // Einstellungen (im Speicher des Handys)
@@ -24,7 +24,7 @@ const RIDE_DEFAULT = 1;
 
 const DEFAULT_SETTINGS = {
   onboarded: false,
-  language: guessLanguage(),
+  language: "en",         // Standard Englisch, Deutsch muss man aktiv wählen
   sensitivity: 3,
   wardrobe: [
     "Halstuch", "Winter-Sturmhaube",

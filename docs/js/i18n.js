@@ -237,20 +237,15 @@ const TEXTS = {
 };
 
 export const LANGUAGES = [
-  { code: "de", name: "Deutsch" },
   { code: "en", name: "English" },
+  { code: "de", name: "Deutsch" },
 ];
 
-let currentLanguage = "de";
+let currentLanguage = "en";
 
 export function setLanguage(code) {
-  currentLanguage = TEXTS[code] ? code : "de";
+  currentLanguage = TEXTS[code] ? code : "en";
   document.documentElement.lang = currentLanguage;
-}
-
-export function guessLanguage() {
-  const preferred = (navigator.language || "de").slice(0, 2).toLowerCase();
-  return TEXTS[preferred] ? preferred : "en";
 }
 
 // Text holen: t("save") oder t("until", "17:50")
