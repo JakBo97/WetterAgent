@@ -52,19 +52,13 @@ export const ZONES = [
 // Rolle: "base" = unten drunter, "mid" = Zwischenschicht, "outer" = außen
 export const CATALOG = {
   "Halstuch": ["head", "outer", 1],
-  "Dünne Sturmhaube": ["head", "outer", 1],
-  "Winter-Sturmhaube": ["head", "outer", 3],
-  "T-Shirt": ["torso", "base", 1],
+  "Sturmhaube": ["head", "outer", 2],
   "Langarm-Shirt": ["torso", "base", 1],
   "Thermo-Shirt": ["torso", "base", 2],
   "Pullover": ["torso", "mid", 2],
   "Heizweste": ["torso", "mid", 3],
-  "Mesh-Jacke": ["torso", "outer", 1],
-  "Jacke ohne Futter": ["torso", "outer", 2],
-  "Jacke mit Futter": ["torso", "outer", 2],
-  "Winterjacke": ["torso", "outer", 3],
+  "Motorradjacke": ["torso", "outer", 2],
   "Sommerhandschuhe": ["hands", "outer", 1],
-  "Übergangshandschuhe": ["hands", "outer", 2],
   "Winterhandschuhe": ["hands", "outer", 3],
   "Thermohose": ["legs", "base", 2],
   "Motorradjeans": ["legs", "outer", 1],
@@ -76,28 +70,42 @@ export const CATALOG = {
   "Winterstiefel": ["boots", "outer", 3],
 };
 
-export const RAIN_GEAR_FULL = "Regenkombi";
-export const RAIN_GEAR_PARTS = ["Regenjacke", "Regenhose"];
-export const RAIN_GEAR_ALL = ["Regenkombi", "Regenjacke", "Regenhose", "Überziehschuhe"];
+export const RAIN_GEAR = "Regenkombi";
+
+// Mindestbestand: Diese Teile hat jeder Fahrer. Sie sind immer im Kleiderschrank
+// und lassen sich nicht abwählen.
+export const REQUIRED_ITEMS = ["Motorradjacke", "Motorradhose"];
 
 // Ideales Outfit je Kleidungsstufe, Schichten von innen nach außen
 export const OUTFITS = {
-  5: { head: ["Winter-Sturmhaube"], torso: ["Thermo-Shirt", "Pullover", "Winterjacke"],
+  5: { head: ["Sturmhaube"], torso: ["Thermo-Shirt", "Pullover", "Motorradjacke"],
        hands: ["Winterhandschuhe"], legs: ["Thermohose", "Hose mit Futter"],
        boots: ["Thermosocken", "Winterstiefel"] },
-  4: { head: ["Winter-Sturmhaube"], torso: ["Thermo-Shirt", "Jacke mit Futter"],
+  4: { head: ["Sturmhaube"], torso: ["Thermo-Shirt", "Motorradjacke"],
        hands: ["Winterhandschuhe"], legs: ["Thermohose", "Motorradhose"],
        boots: ["Thermosocken", "Motorradstiefel"] },
-  3: { head: ["Dünne Sturmhaube"], torso: ["Langarm-Shirt", "Jacke mit Futter"],
-       hands: ["Übergangshandschuhe"], legs: ["Motorradhose"],
+  3: { head: ["Sturmhaube"], torso: ["Langarm-Shirt", "Motorradjacke"],
+       hands: ["Winterhandschuhe"], legs: ["Motorradhose"],
        boots: ["Motorradstiefel"] },
-  2: { head: ["Halstuch"], torso: ["Langarm-Shirt", "Jacke ohne Futter"],
-       hands: ["Übergangshandschuhe"], legs: ["Motorradjeans"],
+  2: { head: ["Halstuch"], torso: ["Langarm-Shirt", "Motorradjacke"],
+       hands: ["Sommerhandschuhe"], legs: ["Motorradjeans"],
        boots: ["Motorradstiefel"] },
-  1: { head: [], torso: ["T-Shirt", "Mesh-Jacke"],
+  1: { head: [], torso: ["Motorradjacke"],
        hands: ["Sommerhandschuhe"], legs: ["Motorradjeans"],
        boots: ["Motorrad-Sneaker"] },
 };
+
+// Mindestanforderung: Unterschichten (z. B. Thermohose, Thermosocken) nie ohne Außenteil.
+// Deshalb muss jede Zone eines Outfits, in der überhaupt etwas steht, ein Außenteil enthalten.
+// Das Außenteil wird immer angezeigt - notfalls als "nicht im Kleiderschrank" (pickFromWardrobe).
+// Diese Prüfung meldet sich in der Browser-Konsole, falls OUTFITS einmal falsch geändert wird.
+for (const [level, outfit] of Object.entries(OUTFITS)) {
+  for (const [zone, items] of Object.entries(outfit)) {
+    if (items.length && !items.some((item) => CATALOG[item][1] === "outer")) {
+      console.error(`OUTFITS Stufe ${level}, Zone ${zone}: Außenteil fehlt`);
+    }
+  }
+}
 
 // ---------------------------------------------------------------------
 // Temperatur
@@ -296,6 +304,20 @@ export function pickFromWardrobe(item, wardrobe) {
   return null;
 }
 
+// Was ändert sich zwischen zwei Kleidungsstufen? Vergleicht die Ideal-Outfits (ohne Kleiderschrank).
+// Ergebnis: nur Zonen mit Änderung, z. B. { zone: "legs", added: ["Hose mit Futter"], removed: ["Motorradhose"] }
+export function compareOutfits(fromLevel, toLevel) {
+  return ZONES.map((zone) => {
+    const before = OUTFITS[fromLevel][zone.key];
+    const after = OUTFITS[toLevel][zone.key];
+    return {
+      zone: zone.key,
+      added: after.filter((item) => !before.includes(item)),
+      removed: before.filter((item) => !after.includes(item)),
+    };
+  }).filter((change) => change.added.length || change.removed.length);
+}
+
 export function recommendOutfit(coldest, sensitivity, wardrobe, rainExpected, change) {
   const level = getClothingLevel(coldest, sensitivity);
 
@@ -310,17 +332,7 @@ export function recommendOutfit(coldest, sensitivity, wardrobe, rainExpected, ch
     return { key: zone.key, name: zone.name, layers };
   });
 
-  let rainGear = null;
-  if (rainExpected) {
-    if (wardrobe.has(RAIN_GEAR_FULL)) {
-      rainGear = { name: RAIN_GEAR_FULL, missing: false };
-    } else {
-      const parts = RAIN_GEAR_PARTS.filter((part) => wardrobe.has(part));
-      rainGear = parts.length
-        ? { name: parts.join(" + "), missing: false }
-        : { name: RAIN_GEAR_FULL, missing: true };
-    }
-  }
+  const rainGear = rainExpected ? { name: RAIN_GEAR, missing: !wardrobe.has(RAIN_GEAR) } : null;
 
   let tip = null;
   if (change <= -TREND_CHANGE) tip = "colder";

@@ -307,6 +307,8 @@ input[type=range]:focus-visible { outline: 2px solid var(--text); outline-offset
 .example { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; padding-top: 10px; border-top: 1px solid #2E333B; }
 .chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .chip-static { display: inline-flex; align-items: center; gap: 6px; background: var(--tile-active); border-radius: 999px; padding: 4px 11px 4px 9px; font-size: 14px; font-weight: 600; }
+.chip-static .muted { font-weight: 500; }
+.chip-static.removed { background: transparent; border: 1px dashed var(--faint); color: var(--muted); text-decoration: line-through; }
 .dot { width: 9px; height: 9px; border-radius: 50%; flex: 0 0 9px; display: inline-block; }
 
 .category { display: flex; flex-direction: column; gap: 8px; padding-top: 12px; border-top: 1px solid var(--card-border); }
@@ -320,6 +322,9 @@ input[type=range]:focus-visible { outline: 2px solid var(--text); outline-offset
 .chip .dot { opacity: 0.45; }
 .chip[aria-pressed="true"] { background: var(--tile-active); color: var(--text); border: 1px solid #5A606A; }
 .chip[aria-pressed="true"] .dot { opacity: 1; }
+/* Mindestbestand: immer an, oranger Rand + Schloss, lässt sich nicht antippen */
+.chip.required { border: 1px solid var(--brand); cursor: default; }
+.required-hint { display: flex; align-items: center; gap: 6px; margin-top: -4px; }
 
 .segments { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; background: var(--tile); border-radius: 14px; padding: 4px; }
 .segment { min-height: 44px; border: 0; border-radius: 10px; background: transparent; color: var(--muted); font-size: 15px; font-weight: 600; }

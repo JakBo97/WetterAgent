@@ -15,7 +15,9 @@ Live: https://jakbo97.github.io/WetterAgent/ (GitHub Pages aus `main`, Ordner `/
 - Frag nach, bevor du etwas am Konzept oder Design änderst, das unten als Entscheidung festgehalten ist.
 - Commit-Nachrichten auf Deutsch, kurz und beschreibend (z. B. "Regler startet bei 1 Stunde").
 - **Vor jedem Commit, der Dateien in `docs/` ändert**, die Versionsnummer `?v=` an allen Stellen
-  um eins erhöhen (siehe Cache-Busting unter "Testen").
+  um eins erhöhen (siehe Cache-Busting unter "Testen"). Genau **einmal pro Commit**, direkt vor dem
+  Commit, nicht nach jeder einzelnen Änderung. So werden keine Nummern übersprungen: Steht die Nummer
+  schon eins über dem letzten Commit (`git diff`), bleibt sie so.
 - Ich nutze Windows, VS Code und ein iPhone.
 
 ## Aufbau
@@ -60,6 +62,14 @@ Wenn sich Regeln in `logic.js` ändern, sag Bescheid, ob `main.py` nachgezogen w
   Kleidungsstufen 1–5, Outfits in `OUTFITS`, Teile mit Zone/Rolle/Wärme in `CATALOG`.
 - **Kleiderschrank**: Empfohlen wird nur, was man besitzt. Fehlt ein Teil, wird der beste Ersatz
   gleicher Zone und Rolle gewählt; fehlt ein Außenteil ganz, wird es mit "nicht im Kleiderschrank" angezeigt.
+  Außer beim Mindestbestand darf jede Zone leer sein.
+- **Mindestbestand** (`REQUIRED_ITEMS`): Motorradjacke und Motorradhose. Immer ausgewählt, nicht
+  abwählbar. Beim ersten Öffnen ist nur der Mindestbestand ausgewählt, alles andere aus.
+  Teile, die es nicht mehr gibt, werden beim Laden der Einstellungen aussortiert.
+- **Katalog bewusst schlank**: Kopf nur Halstuch/Sturmhaube, kein T-Shirt, eine Motorradjacke (kein Futter-Unterschied),
+  Handschuhe nur Sommer/Winter, Regen nur Regenkombi.
+- **Mindestanforderung**: Unterschichten (Thermohose, Thermosocken, Thermo-Shirt …) nie ohne Außenteil
+  der gleichen Zone. Jede Zone in `OUTFITS` mit Inhalt braucht ein Außenteil (wird beim Laden geprüft).
 - **Wärmestufen** der Kleidung: 1 leicht, 2 warm, 3 winterfest (0 = Regen).
 - **Glätte** (Schätzung): Boden ≤ 1 °C **und** (Regen in den letzten 3 h **oder** Luft nahe Taupunkt).
   Glätte "jetzt" steht im Jetzt-Block, Glätte "später" im Fahrt-Block, nie doppelt.
@@ -88,7 +98,9 @@ Weitere Festlegungen:
 - Markenfarbe Race-Orange `#FF8A3D`. Temperaturfarben: eisblau → blau → türkis → grün → gelb → orange.
 - Regen immer blau, Wind immer lila, Glätte orange-gelb.
 - Einstellungen: Sprache (EN/DE, Standard Englisch; Deutsch wählt man aktiv), Standort (GPS an/aus + Ortssuche), Kälteempfinden mit
-  Live-Beispiel bei aktueller Temperatur, Kleiderschrank als An/Aus-Chips nach Zonen.
+  Live-Beispiel bei aktueller Temperatur (bei "Normal" das ganze Ideal-Outfit, sonst nur die Unterschiede
+  zu "Normal": + dazu, − weg, "X statt Y"; unabhängig vom Kleiderschrank), Kleiderschrank als An/Aus-Chips nach Zonen
+  (Mindestbestand mit orangem Rand und Schloss).
 - Ersteinrichtung = dieselbe Einstellungsseite mit "Los geht's" statt "Speichern".
 - Einstellungen liegen im `localStorage` (Schlüssel `motoweather.settings.v1`), immer in try/catch.
 - Touch-Ziele mindestens 44 px, Buttons sind echte `<button>`, Symbole haben `aria-hidden` oder `aria-label`.
@@ -98,8 +110,8 @@ Weitere Festlegungen:
 - Lokal: im Ordner `docs` `python -m http.server` ausführen, dann http://localhost:8000 öffnen.
   (Die `index.html` per Doppelklick zu öffnen funktioniert wegen der JS-Module nicht.)
 - **Cache-Busting**: Alle Dateiverweise tragen eine Versionsnummer (z. B. `?v=1`): in `index.html`
-  (`style.css`, `js/app.js`) und bei den `import`s oben in `js/app.js`. Bei jedem Update, das
-  CSS oder JS ändert, die Nummer **überall gleich** um 1 erhöhen, sonst lädt das iPhone die alte Version.
+  (`style.css`, `js/app.js`) und bei den `import`s oben in `js/app.js`. Pro Commit, der
+  `docs/` ändert, die Nummer **einmal und überall gleich** um 1 erhöhen, sonst lädt das iPhone die alte Version.
   Falls der Browser trotzdem noch die alte Version zeigt: **Strg + F5**.
 - Logik-Änderungen in `logic.js` mit ein paar Beispielwerten prüfen (warmer Nachmittag mit
   Regen später, eisiger Morgen mit Glätte), bevor die Oberfläche angepasst wird.
