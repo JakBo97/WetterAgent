@@ -4,12 +4,12 @@
 // =====================================================================
 
 // Versionsnummer (?v=...) gleich halten wie in index.html (Cache-Busting).
-import { fetchWeather, parseCurrent, parseHourly, getGpsPosition, getPlaceName, searchPlaces } from "./data.js?v=6";
+import { fetchWeather, parseCurrent, parseHourly, getGpsPosition, getPlaceName, searchPlaces } from "./data.js?v=7";
 import {
-  buildQuickCheck, getRidingTemperature, getFeelBand, getClothingLevel, compareOutfits, idealOutfit,
+  buildQuickCheck, getRidingTemperature, getFeelBand, clothingTemperature, recommendTorso, chooseKombi,
   FEEL_BANDS, CATALOG, ZONES, RAIN_GEAR, GUSTS_STRONG,
-} from "./logic.js?v=6";
-import { t, itemName, setLanguage, LANGUAGES } from "./i18n.js?v=6";
+} from "./logic.js?v=7";
+import { t, itemName, setLanguage, LANGUAGES } from "./i18n.js?v=7";
 
 // ---------------------------------------------------------------------
 // Einstellungen (im Speicher des Handys)
@@ -27,7 +27,9 @@ const DEFAULT_SETTINGS = {
   language: "en",         // Standard Englisch, Deutsch muss man aktiv wählen
   sensitivity: 3,
   wardrobe: ["Textiljacke", "Textilhose"], // beim ersten Öffnen nur Jacke und Hose ausgewählt
-  alwaysGear: true,       // immer mit Schutzkleidung (Jacke, Hose, Handschuhe)
+  preferredKombi: "textil", // Textil oder Leder - nur wichtig, wenn beide Jacken da sind
+  protectionTop: true,    // Motorradjacke immer
+  protectionBottom: true, // Motorradhose (oder -jeans) immer
   useGps: true,
   manualPlace: { name: "Freising", region: "Bayern, Deutschland", latitude: 48.40, longitude: 11.74 },
 };
@@ -40,9 +42,16 @@ function loadSettings() {
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
     settings = { ...DEFAULT_SETTINGS, ...(saved || {}) };
+    // Frühere Einstellung "Immer mit Schutzkleidung: aus" auf die zwei neuen Schalter übertragen
+    if (saved && saved.alwaysGear === false && saved.protectionTop === undefined) {
+      settings.protectionTop = false;
+      settings.protectionBottom = false;
+    }
   } catch {
     settings = { ...DEFAULT_SETTINGS };
   }
+  delete settings.alwaysGear;
+  if (!["textil", "leder"].includes(settings.preferredKombi)) settings.preferredKombi = "textil";
   // Umbenannte Teile übernehmen, Teile, die es nicht mehr gibt, aussortieren
   const list = Array.isArray(settings.wardrobe) ? settings.wardrobe : [];
   const renamed = list.map((name) => RENAMED_ITEMS[name] || name);
@@ -200,8 +209,9 @@ function renderTestBar() {
 
 function currentCheck() {
   const { current, hours } = shownWeather();
+  const { sensitivity, wardrobe, preferredKombi, protectionTop, protectionBottom } = state.settings;
   return buildQuickCheck(current, hours, new Date(), state.rideHours,
-    state.settings.sensitivity, new Set(state.settings.wardrobe), state.settings.alwaysGear);
+    { sensitivity, wardrobe: new Set(wardrobe), preferredKombi, protectionTop, protectionBottom });
 }
 
 function renderHome() {
@@ -433,39 +443,66 @@ function updateRide() {
   renderOutfit(check);
 }
 
+// Name einer Schicht: Kleiderschrank-Teil oder allgemeine Schicht ("Warme Schicht")
+function layerName(l) {
+  return l.type === "item" ? escapeHtml(itemName(l.name)) : t("layerNames")[l.type];
+}
+
+// Kurzbeschreibung der Schichten unter der Jacke, z. B. "+ 1 warme Schicht" oder "+ 2 Schichten"
+function torsoExtra(under) {
+  if (!under.length) return "";
+  const kinds = under.map((l) => (l.type === "item" ? "heatedVest" : l.type));
+  if (kinds.every((kind) => kind === kinds[0])) return t("plusLayers")[kinds[0]](under.length);
+  return t("plusMixed")(under.length);
+}
+
 function renderOutfit(check) {
   const outfit = check.outfit;
   const ride = check.ride;
   const warmth = t("warmth");
+  const muted = (text) => `<span class="muted">${text}</span>`;
 
   const tiles = outfit.zones.map((zone) => {
-    const layers = zone.layers;
+    const { layers, hints } = zone;
     const canOpen = layers.length > 0;
     const open = canOpen && state.openZone === zone.key;
     const outer = layers[layers.length - 1];
-    let strip = (layers.length ? layers : [null]).map((l) => `<i class="${l ? `w${l.warmth}` : ""}"></i>`).join("");
-    let itemText = outer ? escapeHtml(itemName(outer.name)) : t("nothingExtra");
-
+    let stripLayers = layers;
+    let itemText;
     let meta = "";
-    if (zone.noGear) {
-      // Ohne Schutzkleidung bei Wärme: Teile stehen nur aufgeklappt als "optional"
-      itemText = t("noGear");
-      meta = `<span class="muted">${t("gearRecommended")}</span>`;
-      strip = "<i></i>";
-    } else if (layers.length) {
-      // Wichtige Hinweise stehen direkt auf der Kachel: fehlt im Kleiderschrank, evtl. zu kalt, optional
-      let note = null;
-      if (outer.missing) note = t("notOwned");
-      else if (zone.tooCold) note = t("tooCold");
-      else if (outer.optional) note = t("optional");
+
+    if (zone.key === "torso") {
+      // Groß die Jacke (oder "Nur T-Shirt"), darunter die Schichten; Farbstreifen: Jacke zuerst
+      const hasJacket = !hints.includes("noJacket") && layers.length > 0;
+      const under = hasJacket ? layers.slice(0, -1) : layers;
+      stripLayers = [...layers].reverse();
+      if (hints.includes("noProtectionTop")) {
+        itemText = t("onlyTShirt");
+        meta = muted(t("noProtectionTop"));
+      } else {
+        itemText = hasJacket ? layerName(outer) : t("withoutJacket");
+        meta = muted([torsoExtra(under), hasJacket ? "" : t("noJacket")].filter(Boolean).join(" · "));
+      }
+    } else if (hints.includes("noProtectionBottom")) {
+      itemText = t("normalPants");
+      meta = muted(t("noProtectionBottom"));
+    } else if (!layers.length) {
+      itemText = t("nothingExtra");
+    } else {
+      itemText = layerName(outer);
       const n = layers.length - 1;
-      meta = n > 0
-        ? `<span class="more-badge">+${n}</span><span>${note || t("layersBelow", n)}</span>`
-        : `<span class="muted">${note || warmth[outer.warmth]}</span>`;
+      if (zone.key === "head" && n > 0) {
+        meta = muted(`+ ${layers.slice(0, -1).map(layerName).join(" + ")}`);
+      } else if (n > 0) {
+        meta = `<span class="more-badge">+${n}</span><span>${outer.missing ? t("notOwned") : t("layersBelow", n)}</span>`;
+      } else {
+        meta = muted(outer.missing ? t("notOwned") : warmth[outer.warmth]);
+      }
     }
 
+    const strip = (stripLayers.length ? stripLayers : [null]).map((l) => `<i class="${l ? `w${l.warmth}` : ""}"></i>`).join("");
     const inner = `<span class="tile-zone">${icon(zone.key, 22, "#C3C7CD")}${t("zones")[zone.key]}</span>
-      <span class="tile-item ${layers.length && !zone.noGear ? "" : "empty"}">${itemText}</span>
+      <span class="tile-item ${layers.length ? "" : "empty"}">${itemText}</span>
       <span class="tile-meta">${meta}</span>
       <span class="strip">${strip}</span>`;
 
@@ -488,19 +525,29 @@ function renderOutfit(check) {
     <span class="strip"><i class="${gear ? "w0" : ""}"></i></span>
   </div>`);
 
-  // Aufgeklappte Zone - auch wenn sie nur ein Teil hat
+  // Aufgeklappte Zone, von außen nach innen - auch wenn sie nur ein Teil hat
   let detail = "";
   const openZone = outfit.zones.find((z) => z.key === state.openZone && z.layers.length > 0);
   if (openZone) {
-    const rows = [...openZone.layers].reverse().map((l) => `<div class="layer">
+    const rows = [...openZone.layers].reverse().map((l) => {
+      const sub = l.type === "item" ? "" : `<small class="layer-sub">${t("layerHints")[l.type]}</small>`;
+      const missing = l.missing ? ` <small class="muted">(${t("notOwned")})</small>` : "";
+      return `<div class="layer">
       <span class="swatch w${l.warmth}"></span>
-      <span class="name">${escapeHtml(itemName(l.name))}${l.optional ? ` <small class="muted">(${t("optional")})</small>` : ""}${l.missing ? ` <small class="muted">(${t("notOwned")})</small>` : ""}</span>
-      <span class="word w${l.warmth}">${warmth[l.warmth]}</span></div>`).join("");
+      <span class="name">${layerName(l)}${missing}${sub}</span>
+      <span class="word w${l.warmth}">${warmth[l.warmth]}</span></div>`;
+    }).join("");
+    const notes = openZone.hints.filter((hint) => ["heatedVestWouldHelp", "maxWarmth", "noJacket"].includes(hint))
+      .map((hint) => `<div class="hint-text">${t(hint)}</div>`).join("");
     const heading = openZone.layers.length > 1 ? `${t("zones")[openZone.key]} · ${t("outsideIn")}` : t("zones")[openZone.key];
-    detail = `<div class="layer-detail"><div class="label-small">${heading}</div>${rows}</div>`;
+    detail = `<div class="layer-detail"><div class="label-small">${heading}</div>${rows}${notes}</div>`;
   }
 
-  const tip = outfit.tip === "colder" ? t("tipColder") : (outfit.tip === "warmer" ? t("tipWarmer") : null);
+  // Tipps unter den Kacheln: Wechsel auf Textil wegen Regen, Temperaturverlauf
+  const tips = [];
+  if (outfit.zones.some((z) => z.hints.includes("kombiRainSwitch"))) tips.push(t("kombiRainSwitch"));
+  if (outfit.tip === "colder") tips.push(t("tipColder"));
+  if (outfit.tip === "warmer") tips.push(t("tipWarmer"));
 
   document.getElementById("outfit").innerHTML = `
     <div class="outfit-head">
@@ -512,7 +559,7 @@ function renderOutfit(check) {
     <div class="legend">
       <span><i class="w1"></i>${warmth[1]}</span><span><i class="w2"></i>${warmth[2]}</span><span><i class="w3"></i>${warmth[3]}</span>
     </div>
-    ${tip ? `<div class="tip">${tip}</div>` : ""}`;
+    ${tips.length ? `<div class="tip">${tips.join("<br>")}</div>` : ""}`;
 }
 
 // ---------------------------------------------------------------------
@@ -545,35 +592,31 @@ function closeSettings() {
 }
 
 function renderExample(draft) {
-  // Beispiel mit der aktuellen Fahrtemperatur (oder 10 °C, solange kein Wetter da ist)
+  // Beispiel mit der aktuellen Fahrtemperatur (oder 10 °C, solange kein Wetter da ist):
+  // Oberkörper mit einer Textiljacke, unabhängig vom eigenen Kleiderschrank
   const riding = state.weather ? getRidingTemperature(shownWeather().current) : 10;
-  const baseLevel = getClothingLevel(riding, 3);
-  const level = getClothingLevel(riding, draft.sensitivity);
-  const named = (name) => `<span class="dot w${CATALOG[name][2]}"></span>${escapeHtml(itemName(name))}`;
+  const wardrobe = new Set(["Textiljacke"]);
+  const kombi = chooseKombi(wardrobe, "textil", false);
+  const torsoAt = (sensitivity) => recommendTorso(clothingTemperature(riding, sensitivity), wardrobe, { kombi }).layers;
+  const outsideIn = (layers) => [...layers].reverse();
 
-  // Normal: das komplette Ideal-Outfit (unabhängig vom Kleiderschrank)
-  if (draft.sensitivity === 3) {
-    const ideal = idealOutfit(level);
-    const items = ZONES.flatMap((zone) => ideal[zone.key]);
-    const chips = items.map((name) => `<span class="chip-static">${named(name)}</span>`).join("");
-    return `<div class="example">
-      <span class="hint-text">${t("example", deg(riding))}</span>
-      <div class="chips">${chips}</div></div>`;
+  const chosen = outsideIn(torsoAt(draft.sensitivity));
+  const chips = chosen.map((l, i) => `${i ? '<span class="muted" aria-hidden="true">+</span>' : ""}<span class="chip-static"><span class="dot w${l.warmth}"></span>${layerName(l)}</span>`).join("");
+
+  // Bei anderem Kälteempfinden: zum Vergleich, was "Normal" wäre
+  let compare = "";
+  if (draft.sensitivity !== 3) {
+    const normal = outsideIn(torsoAt(3));
+    const key = (layers) => layers.map((l) => l.name || l.type).join("+");
+    compare = key(normal) === key(chosen)
+      ? `<span class="hint-text">${t("noDifference")}</span>`
+      : `<span class="hint-text">${t("normalWould", t("levels")[2][0], normal.map(layerName).join(" + "))}</span>`;
   }
 
-  // Sonst: nur was sich gegenüber "Normal" ändert
-  const changes = compareOutfits(baseLevel, level);
-  const chips = changes.map((change) => {
-    const removed = change.removed.map((name) => escapeHtml(itemName(name))).join(" + ");
-    if (!change.added.length) return `<span class="chip-static removed">− ${removed}</span>`;
-    const added = change.added.map(named).join(" + ");
-    if (change.removed.length) return `<span class="chip-static">${added}<span class="muted">${t("insteadOf", removed)}</span></span>`;
-    return `<span class="chip-static">+ ${added}</span>`;
-  }).join("");
-
   return `<div class="example">
-    <span class="hint-text">${t("exampleChange", deg(riding), t("levels")[2][0])}</span>
-    ${changes.length ? `<div class="chips">${chips}</div>` : `<span class="hint-text">${t("noDifference")}</span>`}</div>`;
+    <span class="hint-text">${t("example", deg(riding))}</span>
+    <div class="chips">${chips}</div>
+    ${compare}</div>`;
 }
 
 function renderSettings() {
@@ -598,9 +641,19 @@ function renderSettings() {
     const chips = group.items.map((it) => `<button class="chip" data-action="toggle-item" data-item="${escapeHtml(it.name)}" aria-pressed="${wardrobe.has(it.name)}">
       <span class="dot w${it.warmth}"></span>${escapeHtml(itemName(it.name))}${wardrobe.has(it.name) ? icon("check", 14, "#F4F1EA", 3) : ""}</button>`).join("");
     const groupIcon = group.key === "rain" ? icon("drop", 20, "var(--rain)") : icon(group.key, 20, "#C3C7CD");
+    // Oberkörper: Hinweis zu den Schichten und - wenn beide Jacken da sind - die bevorzugte Kombi
+    let extra = "";
+    if (group.key === "torso") {
+      extra = `<div class="hint-text">${t("torsoLayersHint")}</div>`;
+      if (wardrobe.has("Textiljacke") && wardrobe.has("Lederjacke")) {
+        const options = ["textil", "leder"].map((kombi) => `<button class="segment" data-action="set-kombi" data-kombi="${kombi}"
+          aria-pressed="${draft.preferredKombi === kombi}">${t("kombiNames")[kombi]}</button>`).join("");
+        extra += `<div class="kombi-row"><div class="hint-text">${t("preferredKombi")}</div><div class="segments">${options}</div></div>`;
+      }
+    }
     return `<div class="category">
       <div class="category-head"><span class="category-name">${groupIcon}${t("zones")[group.key]}</span><span class="hint-text">${t("countOf", count, group.items.length)}</span></div>
-      <div class="chips">${chips}</div></div>`;
+      <div class="chips">${chips}</div>${extra}</div>`;
   }).join("");
 
   const search = state.search;
@@ -656,10 +709,14 @@ function renderSettings() {
       <div class="question">${t("whatDoYouOwn")}</div>
       <div class="hint-text" style="margin-top:-6px">${t("wardrobeHint")}</div>
       <div class="switch-row">
-        <div><div class="question">${t("alwaysGear")}</div>
-        <div class="hint-text">${draft.alwaysGear ? t("alwaysGearOn") : t("alwaysGearOff")}</div></div>
-        <button class="switch" data-action="toggle-gear" aria-pressed="${draft.alwaysGear}" aria-label="${t("alwaysGear")}"></button>
+        <div class="question">${t("protectionTop")}</div>
+        <button class="switch" data-action="toggle-protection-top" aria-pressed="${draft.protectionTop}" aria-label="${t("protectionTop")}"></button>
       </div>
+      <div class="switch-row">
+        <div class="question">${t("protectionBottom")}</div>
+        <button class="switch" data-action="toggle-protection-bottom" aria-pressed="${draft.protectionBottom}" aria-label="${t("protectionBottom")}"></button>
+      </div>
+      ${draft.protectionTop && draft.protectionBottom ? "" : `<div class="hint-text">${t("protectionOffHint")}</div>`}
       ${groups}
       <div class="legend" style="padding-top:10px;border-top:1px solid var(--card-border)">
         <span><i class="w1"></i>${warmth[1]}</span><span><i class="w2"></i>${warmth[2]}</span><span><i class="w3"></i>${warmth[3]}</span><span><i class="w0"></i>${warmth[0]}</span>
@@ -745,7 +802,9 @@ app.addEventListener("click", (event) => {
     renderHome();
   }
   if (action === "toggle-gps") { state.draft.useGps = !state.draft.useGps; renderSettings(); }
-  if (action === "toggle-gear") { state.draft.alwaysGear = !state.draft.alwaysGear; renderSettings(); }
+  if (action === "toggle-protection-top") { state.draft.protectionTop = !state.draft.protectionTop; renderSettings(); }
+  if (action === "toggle-protection-bottom") { state.draft.protectionBottom = !state.draft.protectionBottom; renderSettings(); }
+  if (action === "set-kombi") { state.draft.preferredKombi = target.dataset.kombi; renderSettings(); }
   if (action === "pick-place") {
     state.draft.manualPlace = state.search.results[Number(target.dataset.index)];
     renderSettings();

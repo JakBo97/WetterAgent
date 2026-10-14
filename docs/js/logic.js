@@ -40,11 +40,27 @@ export const FEEL_BANDS = [
   { limit: Infinity, label: "Heiß", color: "#FF7A45" },
 ];
 
-// Kleidungsstufe nach kältestem Moment: unter diesem Wert -> Stufe (sonst 1)
-const CLOTHING_LEVELS = [[5, 5], [10, 4], [15, 3], [19, 2]];
+// Kleidungstemperatur = kältester Moment der Fahrt + SENSITIVITY_STEP × (Kälteempfinden − 3)
+// Stufe 1 (friert schnell) rechnet 8 °C kälter, Stufe 5 (friert nie) 8 °C wärmer.
+const SENSITIVITY_STEP = 4;
 
-// Kälteempfinden verschiebt die Kleidungsstufe
-const SENSITIVITY_SHIFT = { 1: 2, 2: 1, 3: 0, 4: -1, 5: -2 };
+// Oberkörper: Punkte und Bedarf
+const TORSO_POINTS = { jacket: 5, layerLight: 2, layerWarm: 3, heatedVest: 6 };
+const TORSO_MAX_LAYERS = 2;            // unter der Jacke höchstens zwei Schichten (Heizweste zählt mit)
+// Bedarf ab dieser Kleidungstemperatur (untere Grenze inklusive), von warm nach kalt
+const TORSO_NEEDS = [[19, 5], [15, 7], [10, 8], [5, 10], [0, 11], [-Infinity, 14]];
+const GUSTS_EXTRA_NEED = 1;            // starke Böen: Oberkörper braucht 1 Punkt mehr
+const NO_PROTECTION_TOP_FROM = 19;     // ohne "Motorradjacke immer": ab hier nur T-Shirt
+
+// Andere Zonen: Schwellen nach Kleidungstemperatur
+const JEANS_FROM = 17;                 // ab hier Motorradjeans (wenn vorhanden)
+const NO_PROTECTION_BOTTOM_FROM = 17;  // ohne "Motorradhose immer": ab hier normale Hose
+const THERMO_PANTS_BELOW = 10;         // darunter zusätzlich Thermohose
+const SUMMER_GLOVES_FROM = 10;         // ab hier Sommer-, darunter Winterhandschuhe
+const SNEAKERS_FROM = 19;              // ab hier Motorrad-Sneaker (wenn vorhanden)
+const THERMO_SOCKS_BELOW = 5;          // darunter zusätzlich Thermosocken
+const NECK_SCARF_BELOW = 12;           // darunter zusätzlich Halstuch ...
+const NECK_SCARF_BELOW_GUSTS = 16;     // ... bei starken Böen schon darunter
 
 // ---------------------------------------------------------------------
 // Kleidung
@@ -60,52 +76,41 @@ export const ZONES = [
   { key: "boots", name: "Schuhe" },
 ];
 
-// Alle Teile, die die App kennt: Name -> [Zone, Rolle, Wärme, Punkte]
+// Alle Teile im Kleiderschrank: Name -> [Zone, Rolle, Wärme]
 // Rolle: "base" = unten drunter, "mid" = Zwischenschicht/Zusatz, "outer" = außen
-// Wärme (1-3) ist nur für Farbe und Wort in der Anzeige.
-// Punkte (1-10) sind für die Berechnung: Oberkörper zählt am meisten, dann Unterkörper,
-// dann Schuhe; Kopf und Hände eher wenig. Eine 10 wäre eine beheizte Winterjacke.
+// Wärme (1-3) ist für Farbe und Wort in der Anzeige: 1 leicht, 2 warm, 3 winterfest.
+// Langarm-Shirt, Pullover usw. stehen nicht im Kleiderschrank: dafür gibt es am Oberkörper
+// die allgemeinen Schichten "leicht" und "warm", die jeder hat (LAYER_TYPES).
 export const CATALOG = {
-  "Halstuch": ["head", "mid", 1, 2],      // nur als Zusatz zur Sturmhaube, nie allein
-  "Sturmhaube": ["head", "outer", 2, 1],
-  "Langarm-Shirt": ["torso", "base", 1, 2],
-  "Thermo-Shirt": ["torso", "base", 2, 3],
-  "Pullover": ["torso", "mid", 2, 4],
-  "Heizweste": ["torso", "mid", 3, 7],
-  "Textiljacke": ["torso", "outer", 2, 6],
-  "Lederjacke": ["torso", "outer", 2, 5],
-  "Sommerhandschuhe": ["hands", "outer", 1, 1],
-  "Winterhandschuhe": ["hands", "outer", 3, 4],
-  "Thermohose": ["legs", "base", 2, 3],
-  "Motorradjeans": ["legs", "outer", 1, 3],
-  "Textilhose": ["legs", "outer", 2, 5],
-  "Lederhose": ["legs", "outer", 2, 4],
-  "Thermosocken": ["boots", "base", 2, 2],
-  "Motorrad-Sneaker": ["boots", "outer", 1, 2],
-  "Motorradstiefel": ["boots", "outer", 2, 4],
+  "Halstuch": ["head", "mid", 1],
+  "Sturmhaube": ["head", "outer", 2],
+  "Textiljacke": ["torso", "outer", 2],
+  "Lederjacke": ["torso", "outer", 2],
+  "Heizweste": ["torso", "mid", 3],
+  "Sommerhandschuhe": ["hands", "outer", 1],
+  "Winterhandschuhe": ["hands", "outer", 3],
+  "Thermohose": ["legs", "base", 2],
+  "Motorradjeans": ["legs", "outer", 1],
+  "Textilhose": ["legs", "outer", 2],
+  "Lederhose": ["legs", "outer", 2],
+  "Thermosocken": ["boots", "base", 2],
+  "Motorrad-Sneaker": ["boots", "outer", 1],
+  "Motorradstiefel": ["boots", "outer", 2],
 };
 
-// Punktebedarf je Zone und Kleidungsstufe 1-5
-// (Stufe 1: ab 19° Fahrtemperatur, 2: 15-19°, 3: 10-15°, 4: 5-10°, 5: unter 5°).
-// Gezählt wird nur, was zum Wärmen nötig ist - Schutzkleidung regelt GEAR_ZONES.
-const ZONE_NEEDS = {
-  head: [0, 1, 3, 3, 3],    // 1 = Sturmhaube, 3 = Sturmhaube + Halstuch
-  torso: [0, 7, 8, 9, 13],
-  hands: [0, 1, 4, 4, 4],
-  legs: [0, 3, 5, 8, 8],
-  boots: [2, 4, 4, 6, 6],
+// Allgemeine Schichten am Oberkörper (kein Kleiderschrank-Teil): Typ -> [Rolle, Wärme]
+export const LAYER_TYPES = {
+  layerLight: ["base", 1],
+  layerWarm: ["mid", 2],
 };
 
-// Typischer Kleiderschrank für das Beispiel beim Kälteempfinden (ohne Sonderteile)
-const REFERENCE_WARDROBE = new Set(Object.keys(CATALOG)
-  .filter((name) => !["Heizweste", "Lederjacke", "Lederhose"].includes(name)));
+// Kombi: Jacke und Hose aus demselben Material. Motorradjeans passt zu beiden.
+const KOMBI = {
+  textil: { jacket: "Textiljacke", pants: "Textilhose" },
+  leder: { jacket: "Lederjacke", pants: "Lederhose" },
+};
 
 export const RAIN_GEAR = "Regenkombi";
-
-// Schutzkleidung: Zonen, deren Außenteil (Jacke, Hose, Handschuhe) vor allem schützt.
-// Fährt jemand nicht immer mit Schutzkleidung, sind sie nur optional, solange die Zone
-// keine Wärmepunkte braucht.
-export const GEAR_ZONES = ["torso", "legs", "hands"];
 
 // ---------------------------------------------------------------------
 // Temperatur
@@ -161,18 +166,6 @@ export function getRidingTemperature(weather) {
 
 export function getFeelBand(ridingTemperature) {
   return FEEL_BANDS.find((band) => ridingTemperature < band.limit);
-}
-
-export function getClothingLevel(coldest, sensitivity) {
-  let level = 1;
-  for (const [limit, clothingLevel] of CLOTHING_LEVELS) {
-    if (coldest < limit) {
-      level = clothingLevel;
-      break;
-    }
-  }
-  level += SENSITIVITY_SHIFT[sensitivity];
-  return Math.max(1, Math.min(5, level));
 }
 
 // ---------------------------------------------------------------------
@@ -313,91 +306,172 @@ export function analyzeRide(current, hours, now, rideHours) {
 // Block 3: ANZIEHEN
 // ---------------------------------------------------------------------
 
-const itemsOf = (zone, role) => Object.keys(CATALOG)
-  .filter((name) => CATALOG[name][0] === zone && CATALOG[name][1] === role);
-const pointsOf = (items) => items.reduce((sum, name) => sum + CATALOG[name][3], 0);
-
-// Ist Kombination a besser als b? Erst: reicht es? Reicht es, möglichst wenig Punkte zu viel,
-// sonst möglichst viele Punkte. Bei Gleichstand: weniger Teile.
-function isBetter(a, b) {
-  if (a.enough !== b.enough) return a.enough;
-  if (a.points !== b.points) return a.enough ? a.points < b.points : a.points > b.points;
-  return a.items.length < b.items.length;
+export function clothingTemperature(coldest, sensitivity) {
+  return coldest + SENSITIVITY_STEP * (sensitivity - 3);
 }
 
-// Wählt für eine Zone die Teile, die den Punktebedarf decken (Schichten von innen nach außen).
-// Höchstens ein Teil pro Rolle. Unterschichten und Zusätze nie ohne Außenteil.
-// Hat man kein Außenteil für die Zone, kommen alle in Frage - als "nicht im Kleiderschrank".
-export function selectZone(zone, need, wardrobe) {
-  const owned = (role) => itemsOf(zone, role).filter((name) => wardrobe.has(name));
-  const outers = owned("outer").length ? owned("outer") : itemsOf(zone, "outer");
-  let best = null;
-  for (const outer of outers) {
-    for (const base of [null, ...owned("base")]) {
-      for (const mid of [null, ...owned("mid")]) {
-        const items = [base, mid, outer].filter(Boolean);
-        const points = pointsOf(items);
-        const candidate = { items, points, enough: points >= need };
-        if (!best || isBetter(candidate, best)) best = candidate;
-      }
-    }
+// Ein Kleiderschrank-Teil als Schicht: { type: "item", name, role, warmth, missing }
+function item(name, wardrobe) {
+  const [, role, warmth] = CATALOG[name];
+  return { type: "item", name, role, warmth, missing: !wardrobe.has(name) };
+}
+
+// Allgemeine Schicht am Oberkörper: { type: "layerLight" | "layerWarm", role, warmth }
+function layer(type) {
+  const [role, warmth] = LAYER_TYPES[type];
+  return { type, role, warmth };
+}
+
+// Erstes vorhandenes Teil aus der Liste - sonst das erste, als "nicht im Kleiderschrank"
+function firstOwned(names, wardrobe) {
+  return item(names.find((name) => wardrobe.has(name)) || names[0], wardrobe);
+}
+
+// Welches Material (Textil/Leder) gilt für Jacke und Hose?
+// Ergebnis: { material, rainSwitch } - rainSwitch: wegen Regen von Leder auf Textil gewechselt
+export function chooseKombi(wardrobe, preferredKombi, rainExpected) {
+  const hasTextil = wardrobe.has(KOMBI.textil.jacket);
+  const hasLeder = wardrobe.has(KOMBI.leder.jacket);
+  if (hasTextil && hasLeder) {
+    if (rainExpected && preferredKombi === "leder") return { material: "textil", rainSwitch: true };
+    return { material: preferredKombi, rainSwitch: false };
   }
-  return best;
+  if (hasTextil) return { material: "textil", rainSwitch: false };
+  if (hasLeder) return { material: "leder", rainSwitch: false };
+  // Keine Jacke: Material nach den vorhandenen Hosen
+  const hasTextilPants = wardrobe.has(KOMBI.textil.pants);
+  const hasLederPants = wardrobe.has(KOMBI.leder.pants);
+  if (hasTextilPants && hasLederPants) return { material: rainExpected ? "textil" : preferredKombi, rainSwitch: false };
+  if (hasLederPants) return { material: "leder", rainSwitch: false };
+  if (hasTextilPants) return { material: "textil", rainSwitch: false };
+  return { material: preferredKombi, rainSwitch: false };
 }
 
-// Ideal-Outfit einer Kleidungsstufe mit dem typischen Kleiderschrank: { head: [...], torso: [...], ... }
-// Teile, die nur optional wären (Bedarf 0 am Kopf), zählen nicht.
-export function idealOutfit(level) {
-  const outfit = {};
-  for (const zone of ZONES) {
-    const need = ZONE_NEEDS[zone.key][level - 1];
-    outfit[zone.key] = need === 0 && zone.key === "head"
-      ? [] : selectZone(zone.key, need, REFERENCE_WARDROBE).items;
+function torsoNeed(clothingTemp, strongGusts) {
+  const [, need] = TORSO_NEEDS.find(([from]) => clothingTemp >= from);
+  return need + (strongGusts ? GUSTS_EXTRA_NEED : 0);
+}
+
+// Alle erlaubten Schicht-Kombinationen unter der Jacke (höchstens TORSO_MAX_LAYERS):
+// leichte Schicht höchstens einmal, warme bis zu zweimal, Heizweste nur wenn vorhanden.
+function torsoLayerCombos(hasHeatedVest) {
+  const options = ["layerLight", "layerWarm", "layerWarm"];
+  if (hasHeatedVest) options.push("heatedVest");
+  const combos = [[]];
+  for (let i = 0; i < options.length; i++) {
+    combos.push([options[i]]);
+    for (let j = i + 1; j < options.length; j++) combos.push([options[i], options[j]]);
   }
-  return outfit;
-}
-
-// Was ändert sich zwischen zwei Kleidungsstufen? Vergleicht die Ideal-Outfits (ohne eigenen Kleiderschrank).
-// Ergebnis: nur Zonen mit Änderung, z. B. { zone: "hands", added: ["Winterhandschuhe"], removed: ["Sommerhandschuhe"] }
-export function compareOutfits(fromLevel, toLevel) {
-  const from = idealOutfit(fromLevel);
-  const to = idealOutfit(toLevel);
-  return ZONES.map((zone) => {
-    const before = from[zone.key];
-    const after = to[zone.key];
-    return {
-      zone: zone.key,
-      added: after.filter((item) => !before.includes(item)),
-      removed: before.filter((item) => !after.includes(item)),
-    };
-  }).filter((change) => change.added.length || change.removed.length);
-}
-
-export function recommendOutfit(coldest, sensitivity, wardrobe, rainExpected, change, alwaysGear) {
-  const level = getClothingLevel(coldest, sensitivity);
-
-  const zones = ZONES.map((zone) => {
-    const need = ZONE_NEEDS[zone.key][level - 1];
-    const pick = selectZone(zone.key, need, wardrobe);
-    let layers = pick.items.map((name) => ({ name, warmth: CATALOG[name][2], missing: !wardrobe.has(name) }));
-    let noGear = false;
-
-    if (need === 0 && GEAR_ZONES.includes(zone.key)) {
-      // Kein Wärmebedarf: Schutzkleidung empfehlen - oder, wenn nicht gewünscht, nur optional
-      if (!alwaysGear) {
-        noGear = true;
-        layers.forEach((layer) => { layer.optional = true; });
-      }
-    } else if (need === 0) {
-      // Kopf ohne Wärmebedarf: Sturmhaube nur als optionaler Tipp, wenn man eine hat
-      layers = layers.filter((layer) => !layer.missing);
-      layers.forEach((layer) => { layer.optional = true; });
-    }
-
-    // Reicht der Kleiderschrank nicht für den Bedarf? (Kopf ist eher optional, dort kein Hinweis)
-    const tooCold = !pick.enough && zone.key !== "head";
-    return { key: zone.key, name: zone.name, layers, noGear, tooCold, need, points: pick.points };
+  // doppelte (z. B. die zwei "layerWarm" einzeln) entfernen
+  const seen = new Set();
+  return combos.filter((combo) => {
+    const key = combo.join("+");
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return combo.length <= TORSO_MAX_LAYERS;
   });
+}
+
+// Oberkörper: Jacke + Schichten nach Punkten.
+// Ergebnis: { layers (innen -> außen), hints, need, points }
+export function recommendTorso(clothingTemp, wardrobe, { strongGusts = false, protectionTop = true, kombi }) {
+  const hints = [];
+  if (kombi.rainSwitch) hints.push("kombiRainSwitch");
+
+  // Ohne "Motorradjacke immer" und warm genug: nur T-Shirt
+  if (!protectionTop && clothingTemp >= NO_PROTECTION_TOP_FROM) {
+    return { layers: [], hints: [...hints, "noProtectionTop"], need: 0, points: 0 };
+  }
+
+  const jacketName = KOMBI[kombi.material].jacket;
+  const hasJacket = wardrobe.has(jacketName);
+  if (!hasJacket) hints.push("noJacket");
+  const jacketPoints = hasJacket ? TORSO_POINTS.jacket : 0;
+  const hasHeatedVest = wardrobe.has("Heizweste");
+  const need = torsoNeed(clothingTemp, strongGusts);
+
+  // Kleinste Summe, die den Bedarf erreicht; bei Gleichstand weniger Teile.
+  // Reicht keine: die wärmste (bei Gleichstand weniger Teile).
+  let best = null;
+  for (const combo of torsoLayerCombos(hasHeatedVest)) {
+    const points = jacketPoints + combo.reduce((sum, type) => sum + TORSO_POINTS[type], 0);
+    const candidate = { combo, points, enough: points >= need };
+    if (!best) { best = candidate; continue; }
+    let better;
+    if (candidate.enough !== best.enough) better = candidate.enough;
+    else if (candidate.points !== best.points) better = candidate.enough ? candidate.points < best.points : candidate.points > best.points;
+    else better = candidate.combo.length < best.combo.length;
+    if (better) best = candidate;
+  }
+  if (!best.enough) hints.push(hasHeatedVest ? "maxWarmth" : "heatedVestWouldHelp");
+
+  // Reihenfolge von innen nach außen: leichte Schicht, warme Schicht(en), Heizweste, Jacke
+  const order = ["layerLight", "layerWarm", "heatedVest"];
+  const layers = [...best.combo].sort((a, b) => order.indexOf(a) - order.indexOf(b))
+    .map((type) => (type === "heatedVest" ? item("Heizweste", wardrobe) : layer(type)));
+  if (hasJacket) layers.push(item(jacketName, wardrobe));
+  return { layers, hints, need, points: best.points };
+}
+
+function recommendLegs(clothingTemp, wardrobe, { protectionBottom = true, kombi }) {
+  if (!protectionBottom && clothingTemp >= NO_PROTECTION_BOTTOM_FROM) {
+    return { layers: [], hints: ["noProtectionBottom"] }; // normale Hose
+  }
+  const layers = [];
+  if (clothingTemp < THERMO_PANTS_BELOW && wardrobe.has("Thermohose")) layers.push(item("Thermohose", wardrobe));
+
+  let pants;
+  if (clothingTemp >= JEANS_FROM && wardrobe.has("Motorradjeans")) {
+    pants = item("Motorradjeans", wardrobe);
+  } else {
+    // Kombi-Hose zur Jacke, sonst die andere Kombi-Hose, sonst Jeans (lieber eine Hose als keine)
+    const matching = KOMBI[kombi.material].pants;
+    const other = KOMBI[kombi.material === "textil" ? "leder" : "textil"].pants;
+    pants = firstOwned([matching, other, "Motorradjeans"], wardrobe);
+  }
+  layers.push(pants);
+  return { layers, hints: [] };
+}
+
+function recommendHands(clothingTemp, wardrobe) {
+  const names = clothingTemp >= SUMMER_GLOVES_FROM
+    ? ["Sommerhandschuhe", "Winterhandschuhe"] : ["Winterhandschuhe", "Sommerhandschuhe"];
+  return { layers: [firstOwned(names, wardrobe)], hints: [] };
+}
+
+function recommendBoots(clothingTemp, wardrobe) {
+  const layers = [];
+  if (clothingTemp < THERMO_SOCKS_BELOW && wardrobe.has("Thermosocken")) layers.push(item("Thermosocken", wardrobe));
+  const names = clothingTemp >= SNEAKERS_FROM
+    ? ["Motorrad-Sneaker", "Motorradstiefel"] : ["Motorradstiefel", "Motorrad-Sneaker"];
+  layers.push(firstOwned(names, wardrobe));
+  return { layers, hints: [] };
+}
+
+function recommendHead(clothingTemp, wardrobe, { strongGusts = false }) {
+  const layers = [];
+  const scarfBelow = strongGusts ? NECK_SCARF_BELOW_GUSTS : NECK_SCARF_BELOW;
+  if (clothingTemp < scarfBelow && wardrobe.has("Halstuch")) layers.push(item("Halstuch", wardrobe));
+  if (wardrobe.has("Sturmhaube")) layers.push(item("Sturmhaube", wardrobe));
+  return { layers, hints: [] };
+}
+
+// Die ganze Empfehlung. options: { sensitivity, wardrobe (Set), rainExpected, strongGusts, change,
+// preferredKombi ("textil" | "leder"), protectionTop, protectionBottom }
+export function recommendOutfit(coldest, options) {
+  const { sensitivity, wardrobe, rainExpected = false, strongGusts = false, change = 0,
+    preferredKombi = "textil", protectionTop = true, protectionBottom = true } = options;
+  const temp = clothingTemperature(coldest, sensitivity);
+  const kombi = chooseKombi(wardrobe, preferredKombi, rainExpected);
+
+  const results = {
+    head: recommendHead(temp, wardrobe, { strongGusts }),
+    torso: recommendTorso(temp, wardrobe, { strongGusts, protectionTop, kombi }),
+    hands: recommendHands(temp, wardrobe),
+    legs: recommendLegs(temp, wardrobe, { protectionBottom, kombi }),
+    boots: recommendBoots(temp, wardrobe),
+  };
+  const zones = ZONES.map((zone) => ({ key: zone.key, name: zone.name, ...results[zone.key] }));
 
   const rainGear = rainExpected ? { name: RAIN_GEAR, missing: !wardrobe.has(RAIN_GEAR) } : null;
 
@@ -405,20 +479,23 @@ export function recommendOutfit(coldest, sensitivity, wardrobe, rainExpected, ch
   if (change <= -TREND_CHANGE) tip = "colder";
   else if (change >= TREND_CHANGE) tip = "warmer";
 
-  return { level, zones, rainGear, tip };
+  return { clothingTemp: temp, kombi, zones, rainGear, tip };
 }
 
 // ---------------------------------------------------------------------
 // Alles zusammen - der Inhalt der Startseite
 // ---------------------------------------------------------------------
 
-export function buildQuickCheck(current, hours, now, rideHours, sensitivity, wardrobe, alwaysGear) {
+// prefs: { sensitivity, wardrobe (Set), preferredKombi, protectionTop, protectionBottom }
+export function buildQuickCheck(current, hours, now, rideHours, prefs) {
   const nowBlock = analyzeNow(current, hours, now);
   const ride = analyzeRide(current, hours, now, rideHours);
 
   // Ist es jetzt schon glatt, steht die Warnung oben - nicht doppelt im Fahrt-Block
   if (nowBlock.ice) ride.iceLater = null;
 
-  const outfit = recommendOutfit(ride.coldest, sensitivity, wardrobe, ride.rainExpected, ride.change, alwaysGear);
+  const outfit = recommendOutfit(ride.coldest, {
+    ...prefs, rainExpected: ride.rainExpected, strongGusts: ride.wind !== null, change: ride.change,
+  });
   return { now: nowBlock, ride, outfit };
 }

@@ -283,6 +283,8 @@ input[type=range]:focus-visible { outline: 2px solid var(--text); outline-offset
 .layer { display: flex; align-items: center; gap: 10px; }
 .layer .swatch { width: 12px; height: 12px; border-radius: 50%; flex: 0 0 12px; }
 .layer .name { flex: 1; font-size: 15px; font-weight: 600; }
+.layer-sub { display: block; margin-top: 2px; font-size: 12px; font-weight: 500; line-height: 1.35; color: var(--muted); }
+.kombi-row { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
 .layer .word { font-size: 13px; font-weight: 600; }
 
 .legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; color: var(--muted); }
@@ -337,8 +339,6 @@ input[type=range]:focus-visible { outline: 2px solid var(--text); outline-offset
 .example { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; padding-top: 10px; border-top: 1px solid #2E333B; }
 .chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .chip-static { display: inline-flex; align-items: center; gap: 6px; background: var(--tile-active); border-radius: 999px; padding: 4px 11px 4px 9px; font-size: 14px; font-weight: 600; }
-.chip-static .muted { font-weight: 500; }
-.chip-static.removed { background: transparent; border: 1px dashed var(--faint); color: var(--muted); text-decoration: line-through; }
 .dot { width: 9px; height: 9px; border-radius: 50%; flex: 0 0 9px; display: inline-block; }
 
 .category { display: flex; flex-direction: column; gap: 8px; padding-top: 12px; border-top: 1px solid var(--card-border); }

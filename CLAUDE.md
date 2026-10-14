@@ -40,8 +40,8 @@ nie fertige Sätze. Alle Texte kommen aus `i18n.js` über `t("schluessel")` bzw.
 Neue Texte immer in **beiden** Sprachen anlegen.
 
 `main.py` ist der ursprüngliche Prototyp. Die Web-App ist inzwischen das Hauptprodukt.
-`main.py` rechnet die Fahrtemperatur noch mit der alten Formel (nur Windchill) und hat noch den alten
-Kleidungskatalog ohne Punktesystem.
+`main.py` rechnet die Fahrtemperatur noch mit der alten Formel (nur Windchill) und hat noch die alte
+Kleidungslogik (feste Outfits statt Kleidungstemperatur, Punkte und Schwellen).
 Wenn sich Regeln in `logic.js` ändern, sag Bescheid, ob `main.py` nachgezogen werden soll.
 
 ## Datenquellen
@@ -67,31 +67,43 @@ Wenn sich Regeln in `logic.js` ändern, sag Bescheid, ob `main.py` nachgezogen w
   - **Regen**: ab 0,1 mm/h −2 °C, ab 2 mm/h −3 °C (`RAIN_LIGHT_*`, `RAIN_MODERATE_*`).
   - Ergebnis auf eine Nachkommastelle gerundet.
 - Die Fahrtemperatur ist ein **objektiver Wert** und für alle Fahrer gleich.
-- **Kälteempfinden** (Stufe 1 friert schnell … 3 normal … 5 friert nie) verschiebt **nur die
-  Kleidungsstufe** (±1/±2), niemals die angezeigte Temperatur.
-- **Kleidung** richtet sich nach dem **kältesten Moment der Fahrt**, nicht nach jetzt.
-  Kleidungsstufen 1–5 nach Fahrtemperatur: ab 19°, 15–19°, 10–15°, 5–10°, unter 5° (`CLOTHING_LEVELS`).
-- **Punktesystem**: Jedes Teil in `CATALOG` hat Zone, Rolle, Wärme (1–3, nur Anzeige) und **Punkte (1–10)**.
-  Oberkörper zählt am meisten, dann Unterkörper, dann Schuhe; Kopf und Hände wenig (Sturmhaube 1,
-  Halstuch 2). Keine 10 (wäre eine beheizte Winterjacke). `ZONE_NEEDS` legt pro Zone und Stufe fest, wie
-  viele Punkte nötig sind; gezählt wird nur Wärme, nicht Schutz.
-- **Auswahl** (`selectZone`): pro Zone die Kombination aus dem Kleiderschrank, die den Bedarf deckt und
-  am wenigsten darüber liegt; bei Gleichstand weniger Teile. Höchstens ein Teil pro Rolle.
-  Reicht der Kleiderschrank nicht, die wärmste Kombination + Hinweis "evtl. zu kalt" (nicht beim Kopf).
-  Kopf ohne Bedarf: Sturmhaube als "optional", wenn man eine hat.
-- **Kleiderschrank**: Empfohlen wird nur, was man besitzt. Fehlt für eine Zone jedes Außenteil, wird das
-  passende mit "nicht im Kleiderschrank" angezeigt. Jede Zone darf im Kleiderschrank leer sein. Beim ersten Öffnen sind nur Textiljacke und Textilhose
-  ausgewählt (nicht gesperrt). Umbenannte Teile werden beim Laden übernommen (`RENAMED_ITEMS`),
-  Teile, die es nicht mehr gibt, aussortiert.
-- **Schutzkleidung** (Einstellung `alwaysGear`, Standard an): An = Jacke, Hose und Handschuhe werden
-  immer empfohlen. Aus = in den Zonen `GEAR_ZONES` steht, solange sie keine Wärmepunkte
-  brauchen, "Keine Schutzkleidung" + "Schutzkleidung empfohlen"; die Teile erscheinen aufgeklappt als "optional".
-  Ein T-Shirt o. Ä. kommt bewusst nicht in den Kleiderschrank.
-- **Katalog bewusst schlank**: Kopf nur Sturmhaube + Halstuch (Halstuch nie allein, nur als Zusatz zur
-  Sturmhaube, wenn es sehr kalt ist), kein T-Shirt, Jacke und Hose je als Textil
-  oder Leder (kein Futter-Unterschied), Handschuhe nur Sommer/Winter, keine Winterstiefel.
-- **Mindestanforderung**: Unterschichten (Thermohose, Thermosocken, Thermo-Shirt …) nie ohne Außenteil
-  der gleichen Zone. Das stellt `selectZone` sicher (jede Kombination enthält ein Außenteil).
+- **Kleidungstemperatur** = Fahrtemperatur im **kältesten Moment der Fahrt** + `SENSITIVITY_STEP` (4) ×
+  (Kälteempfinden − 3). Kälteempfinden Stufe 1 (friert schnell) rechnet 8 °C kälter, 5 (friert nie)
+  8 °C wärmer. Das ändert **nur die Kleidung**, niemals die angezeigte Temperatur.
+- **Kleiderschrank** (`CATALOG`): Kopf Halstuch, Sturmhaube · Oberkörper Textiljacke, Lederjacke,
+  Heizweste · Hände Sommer-, Winterhandschuhe · Unterkörper Thermohose, Motorradjeans, Textilhose,
+  Lederhose · Schuhe Thermosocken, Motorrad-Sneaker, Motorradstiefel · Regen Regenkombi.
+  Shirts und Pullover stehen bewusst **nicht** im Kleiderschrank: am Oberkörper gibt es dafür die
+  allgemeinen Schichten "leicht" und "warm" (`LAYER_TYPES`), die jeder hat. Beim ersten Öffnen sind nur
+  Textiljacke und Textilhose ausgewählt. Unbekannte gespeicherte Teile werden ignoriert bzw. beim Laden
+  aussortiert, umbenannte übernommen (`RENAMED_ITEMS`).
+- **Oberkörper: Punktesystem** (`recommendTorso`): Jacke 5, leichte Schicht 2, warme Schicht 3,
+  Heizweste 6 (nur wenn vorhanden). T-Shirt zählt nicht. Unter der Jacke höchstens 2 Schichten
+  (Heizweste zählt mit), warme Schicht darf doppelt sein, leichte nicht.
+  Bedarf nach Kleidungstemperatur (`TORSO_NEEDS`): ≥ 19: 5 · 15–19: 7 · 10–15: 8 · 5–10: 10 · 0–5: 11 ·
+  < 0: 14; bei starken Böen +1. Gewählt wird die kleinste Summe, die reicht, bei Gleichstand weniger
+  Teile. Reicht keine: die wärmste + Hinweis `heatedVestWouldHelp` (ohne Heizweste) bzw. `maxWarmth`.
+  Keine Jacke im Kleiderschrank: 0 Jackenpunkte + Hinweis `noJacket`.
+- **Andere Zonen: Schwellen** nach Kleidungstemperatur (Konstanten oben in `logic.js`):
+  - Unterkörper: ≥ 17 Motorradjeans (wenn vorhanden), sonst Kombi-Hose; < 10 zusätzlich Thermohose.
+  - Hände: ≥ 10 Sommer-, sonst Winterhandschuhe (immer Handschuhe, auch ohne Schutzkleidung).
+  - Schuhe: ≥ 19 Motorrad-Sneaker (wenn vorhanden), sonst Stiefel; < 5 zusätzlich Thermosocken.
+  - Kopf: Sturmhaube immer, wenn vorhanden; Halstuch zusätzlich < 12 (bei starken Böen < 16).
+    Das Halstuch darf auch allein kommen, wenn keine Sturmhaube da ist.
+  - Fehlt das passende Paar (Handschuhe, Schuhe), das andere vorhandene nehmen. Ist für Hände, Schuhe
+    oder Hose gar nichts da, wird das passende Teil mit "nicht im Kleiderschrank" angezeigt.
+  - Thermohose und Thermosocken kommen nur zusätzlich zu Hose bzw. Schuhen, nie allein.
+- **Kombi-Regel** (`chooseKombi`): Jacke und Hose aus demselben Material (Textil/Leder), Motorradjeans
+  passt zu beiden. Sind beide Jacken da, gilt die Einstellung `preferredKombi` – außer es ist Regen zu
+  erwarten: dann Textil (Hinweis `kombiRainSwitch`). Fehlt die passende Hose, die andere nehmen
+  (lieber eine Hose als keine), danach die Jeans.
+- **Schutzkleidung**: `protectionTop` ("Motorradjacke immer") und `protectionBottom` ("Motorradhose
+  immer"), beide Standard an. Aus: ab Kleidungstemperatur 19 (oben) bzw. 17 (unten) "Nur T-Shirt" bzw.
+  "Normale Hose" (Hinweise `noProtectionTop`, `noProtectionBottom`), darunter normale Logik mit Jacke/Hose,
+  weil sie dann zum Wärmen gebraucht werden. Alte Einstellung `alwaysGear: false` wird auf beide übertragen.
+- **Starke Böen** (≥ `GUSTS_STRONG` jetzt oder während der Fahrt) wirken nur am Oberkörper (+1) und
+  beim Halstuch.
+- Hinweise liefert `logic.js` nur als Schlüssel, die Texte stehen in `i18n.js`.
 - **Wärmestufen** der Kleidung: 1 leicht, 2 warm, 3 winterfest (0 = Regen).
 - **Glätte** (Schätzung): Boden ≤ 1 °C **und** (Regen in den letzten 3 h **oder** Luft nahe Taupunkt).
   Glätte "jetzt" steht im Jetzt-Block, Glätte "später" im Fahrt-Block, nie doppelt.
@@ -113,17 +125,23 @@ Startseite mit genau **drei Blöcken**:
    aufklappbar Regen % und Böen.
 3. **ANZIEHEN**: 2×2+2 Kacheln (Kopf, Oberkörper, Hände, Unterkörper, Schuhe, Regen).
    Kachel zeigt das äußerste Teil, "+N Schichten darunter", Farbstreifen pro Schicht.
-   Antippen klappt die Schichten auf (auch bei nur einem Teil). Regen-Kachel ist blau, wenn nötig.
+   Oberkörper: groß die Jacke (oder "Nur T-Shirt"), darunter "+ 1 warme Schicht" / "+ 2 Schichten";
+   Farbstreifen Jacke zuerst, dann je Schicht (leicht/warm/Heizweste = winterfest). Kopf: "Sturmhaube"
+   + "+ Halstuch". Antippen klappt die Schichten auf (von außen nach innen, auch bei nur einem Teil);
+   allgemeine Schichten mit Beispiel-Hinweis (z. B. "Pullover, Thermo-Shirt oder das Futter deiner Jacke").
+   Hinweise unauffällig in Kachel bzw. Aufklappliste, `kombiRainSwitch` als Satz im Tipp-Bereich.
+   Regen-Kachel ist blau, wenn nötig.
 
 Weitere Festlegungen:
 - Dunkles Design, Schriften Barlow / Barlow Condensed.
 - Markenfarbe Race-Orange `#FF8A3D`. Temperaturfarben: eisblau → blau → türkis → grün → gelb → orange.
 - Regen immer blau, Wind immer lila, Glätte orange-gelb.
 - Einstellungen: Sprache (EN/DE, Standard Englisch; Deutsch wählt man aktiv), Standort (GPS an/aus + Ortssuche), Kälteempfinden mit
-  Live-Beispiel bei aktueller Temperatur (bei "Normal" das ganze Ideal-Outfit mit dem
-  typischen Kleiderschrank `REFERENCE_WARDROBE`, sonst nur die Unterschiede
-  zu "Normal": + dazu, − weg, "X statt Y"; unabhängig vom Kleiderschrank), Kleiderschrank als An/Aus-Chips nach Zonen
-  mit Schalter "Immer mit Schutzkleidung".
+  Live-Beispiel bei aktueller Fahrtemperatur (Oberkörper: Jacke + Schichten, mit einer Textiljacke,
+  unabhängig vom Kleiderschrank; bei anderer Stufe als "Normal" zum Vergleich, was "Normal" wäre),
+  Kleiderschrank als An/Aus-Chips nach Zonen, Schalter "Motorradjacke immer" / "Motorradhose immer"
+  (ist einer aus, einmal ein sachlicher Hinweis darunter, kein Banner auf der Startseite),
+  "Bevorzugte Kombi" Textil/Leder nur sichtbar, wenn beide Jacken angehakt sind.
 - Ersteinrichtung = dieselbe Einstellungsseite mit "Los geht's" statt "Speichern".
 - Einstellungen liegen im `localStorage` (Schlüssel `motoweather.settings.v1`), immer in try/catch.
 - Touch-Ziele mindestens 44 px, Buttons sind echte `<button>`, Symbole haben `aria-hidden` oder `aria-label`.
@@ -147,3 +165,4 @@ Weitere Festlegungen:
 - **iPhone-Widget** für den Jetzt-Block über die App Scriptable; Antippen öffnet die Web-App.
 - Kleiderschrank verfeinern (z. B. dünne/dicke Socken, Heizweste, Heizgriffe in der Logik nutzen).
 - Später vielleicht: Planungsmodus für andere Startzeiten oder Tage.
+- Kälteempfinden mitlernen – Konzept noch offen, aber keine Abfrage nach jeder Fahrt.
