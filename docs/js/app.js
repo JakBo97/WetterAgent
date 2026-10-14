@@ -4,12 +4,12 @@
 // =====================================================================
 
 // Versionsnummer (?v=...) gleich halten wie in index.html (Cache-Busting).
-import { fetchWeather, parseCurrent, parseHourly, getGpsPosition, getPlaceName, searchPlaces } from "./data.js?v=7";
+import { fetchWeather, parseCurrent, parseHourly, getGpsPosition, getPlaceName, searchPlaces } from "./data.js?v=8";
 import {
   buildQuickCheck, getRidingTemperature, getFeelBand, clothingTemperature, recommendTorso, chooseKombi,
   FEEL_BANDS, CATALOG, ZONES, RAIN_GEAR, GUSTS_STRONG,
-} from "./logic.js?v=7";
-import { t, itemName, setLanguage, LANGUAGES } from "./i18n.js?v=7";
+} from "./logic.js?v=8";
+import { t, itemName, setLanguage, LANGUAGES } from "./i18n.js?v=8";
 
 // ---------------------------------------------------------------------
 // Einstellungen (im Speicher des Handys)
@@ -453,7 +453,7 @@ function torsoExtra(under) {
   if (!under.length) return "";
   const kinds = under.map((l) => (l.type === "item" ? "heatedVest" : l.type));
   if (kinds.every((kind) => kind === kinds[0])) return t("plusLayers")[kinds[0]](under.length);
-  return t("plusMixed")(under.length);
+  return t("plusMixed", under.length);
 }
 
 function renderOutfit(check) {
