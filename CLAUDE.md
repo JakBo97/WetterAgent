@@ -114,8 +114,12 @@ Wenn sich Regeln in `logic.js` ändern, sag Bescheid, ob `main.py` nachgezogen w
   Dieser Endpunkt zählt auch für den kältesten Moment der Fahrt.
 - **Einordnung** (`FEEL_BANDS`) fürs Motorradfahren in 4 Bereichen: Kalt < 8 · Kühl < 16 · Angenehm < 26 ·
   Heiß ab 26 (Fahrtemperatur).
-- **Verlauf** (aufklappbar "Regen & Wind im Verlauf") zeigt immer die nächsten 8 Stunden mit Uhrzeit,
-  Regen % und Böen; Stunden außerhalb der Fahrt sind abgeblendet. Die Temperatur steht dort nicht mehr,
+- **Verlauf** (aufklappbar "Regen & Wind im Verlauf"): 9 Spalten für jetzt, +1 h … +8 h (`ride.columns`),
+  jede genau unter ihrer Stelle auf dem Regler, mit Uhrzeit, Regen % und Böen; Spalten nach dem
+  Fahrtende sind abgeblendet. Regen % kommt aus der Stunde, in die der Zeitpunkt fällt.
+- **Regen-Hinweis** zählt dieselben Stunden: alle, die die Fahrt berühren, auch die angefangene letzte.
+  Open-Meteo gibt Regenwahrscheinlichkeit für die Stunde *davor* an – "Regen ab ca. 22 Uhr" meint
+  also den 23-Uhr-Wert. Die Prozentzahl ist der Höchstwert während der Fahrt. Die Temperatur steht dort nicht mehr,
   sie steht oben in der großen Anzeige.
 - Schwellenwerte stehen als Konstanten oben in `logic.js`, nicht verstreut im Code.
 
@@ -133,7 +137,13 @@ Startseite mit genau **drei Blöcken**:
    eine große orange Sonne mit flimmernder Luft).
    Nur Glätte "jetzt" erscheint hier als Warnung (immer, weil die Fahrt jetzt losgeht).
 2. **DEINE FAHRT**: Regler mit Strichen pro halber Stunde (links "Jetzt"), darunter Hinweise (Glätte
-   später, Regen blau, Wind lila, sonst grüner Haken "trocken"), aufklappbar Uhrzeiten, Regen % und Böen.
+   später, Regen blau, Wind lila, sonst grüner Haken "trocken"), aufklappbar Uhrzeiten, Regen % und Böen
+   (Regen und Böen klar getrennt: je Zeile eine eigene Überschrift mit Symbol – blau "Regenwahrscheinlichkeit %",
+   lila "Böen in km/h" –, Werte in Kästchen ohne Einheit. Spalten der Fahrt liegen in jeder Zeile in einem
+   orange getönten **Fahrt-Fenster**, das mit dem Regler wächst, dort hell und farbig: Regenbalken blau
+   (voll bei 100 %), Böen-Balken lila (voll bei `GUST_BAR_FULL` = 60 km/h), Regenwerte blau umrandet
+   (auch bei 0), Böen lila umrandet, starke Böen gefüllt lila; Spalten danach
+   abgeblendet).
 3. **ANZIEHEN**: 2×2+2 Kacheln (Kopf, Oberkörper, Hände, Unterkörper, Schuhe, Regen).
    Kachel zeigt das äußerste Teil, "+N Schichten darunter", Farbstreifen pro Schicht.
    Oberkörper: groß die Jacke (oder "Nur T-Shirt"), darunter "+ 1 warme Schicht" / "+ 2 Schichten";

@@ -4,12 +4,12 @@
 // =====================================================================
 
 // Versionsnummer (?v=...) gleich halten wie in index.html (Cache-Busting).
-import { fetchWeather, parseCurrent, parseHourly, getGpsPosition, getPlaceName, searchPlaces } from "./data.js?v=9";
+import { fetchWeather, parseCurrent, parseHourly, getGpsPosition, getPlaceName, searchPlaces } from "./data.js?v=10";
 import {
   buildQuickCheck, getRidingTemperature, clothingTemperature, recommendTorso, chooseKombi,
   FEEL_BANDS, CATALOG, ZONES, RAIN_GEAR, GUSTS_STRONG,
-} from "./logic.js?v=9";
-import { t, itemName, setLanguage, LANGUAGES } from "./i18n.js?v=9";
+} from "./logic.js?v=10";
+import { t, itemName, setLanguage, LANGUAGES } from "./i18n.js?v=10";
 
 // ---------------------------------------------------------------------
 // Einstellungen (im Speicher des Handys)
@@ -127,6 +127,7 @@ const ICONS = {
   warning: '<path d="M12 3l9.5 17h-19z"></path><line x1="12" y1="10" x2="12" y2="14"></line><line x1="12" y1="17" x2="12" y2="17.01"></line>',
   check: '<path d="M5 12.5l4.5 4.5L19 7.5"></path>',
   clock: '<circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3.5 2"></path>',
+  wind: '<path d="M3 8h10a2.5 2.5 0 1 0-2.5-2.5"></path><path d="M3 12h15a2.5 2.5 0 1 1-2.5 2.5"></path><path d="M3 16h7"></path>',
   chevronDown: '<path d="M6 9l6 6 6-6"></path>',
   chevronLeft: '<path d="M15 6l-6 6 6 6"></path>',
   info: '<circle cx="12" cy="12" r="9"></circle><line x1="12" y1="11" x2="12" y2="16.5"></line><line x1="12" y1="7.6" x2="12" y2="7.61"></line>',
@@ -451,18 +452,30 @@ function updateRide() {
     hints.push(`<div class="calm">${icon("check", 18, "#9FDB6B", 2)}<span>${calmText}</span></div>`);
   }
 
-  // Verlauf (aufklappbar): Uhrzeiten, Regen % und Böen - die Temperatur steht oben in der Jetzt-Kachel
-  const cells = (inner) => ride.timeline.map((p) => `<div class="cell ${p.inRide ? "" : "off"}">${inner(p)}</div>`).join("");
+  // Verlauf (aufklappbar): Uhrzeiten, Regen % und Böen - jede Spalte steht genau unter ihrer Stelle
+  // auf dem Regler (jetzt, +1 h ... +8 h); Spalten innerhalb der Fahrt hell, danach abgeblendet.
+  const span = RIDE_MAX - RIDE_MIN;
+  const cells = (inner) => ride.columns.map((p) => `<div class="cell ${p.inRide ? "" : "off"}"
+    style="left:${(p.offset - RIDE_MIN) / span * 100}%">${inner(p)}</div>`).join("");
 
   let details = "";
   if (state.showDetails) {
-    const timeRow = cells((p) => `<div class="cell-time">${String(p.time.getHours()).padStart(2, "0")}:00</div>`);
-    const rainRow = cells((p) => `<div class="rain-bar"><i style="height:${Math.round(p.rainProbability / 100 * 28)}px"></i></div>
+    const timeRow = cells((p) => `<div class="cell-time">${clock(p.time)}</div>`);
+    const rainRow = cells((p) => `<div class="bar rain"><i style="height:${Math.round(p.rainProbability / 100 * BAR_HEIGHT)}px"></i></div>
       <div class="rain-value ${p.rainProbability >= 30 ? "high" : ""}">${p.rainProbability}</div>`);
-    const gustRow = cells((p) => `<div class="gust ${p.gusts >= GUSTS_STRONG ? "strong" : ""}">${Math.round(p.gusts)}</div>`);
-    details = `<div class="timeline-row">${timeRow}</div>
-      <div class="row-title" style="color:var(--rain)">${t("rainRow")}</div><div class="timeline-row">${rainRow}</div>
-      <div class="row-title" style="color:var(--wind)">${t("gustRow")}</div><div class="timeline-row">${gustRow}</div>`;
+    // Böen-Balken wie beim Regen: bei GUST_BAR_FULL km/h voll gefüllt
+    const gustHeight = (gusts) => Math.round(Math.min(1, gusts / GUST_BAR_FULL) * BAR_HEIGHT);
+    const gustRow = cells((p) => `<div class="bar wind"><i style="height:${gustHeight(p.gusts)}px"></i></div>
+      <div class="gust ${p.gusts >= GUSTS_STRONG ? "strong" : ""}">${Math.round(p.gusts)}</div>`);
+    // Jede Zeile in einem eigenen Abschnitt mit Fahrt-Fenster (getönte Fläche hinter den Spalten der
+    // Fahrt, wächst mit dem Regler); die Überschriften stehen dazwischen, damit Regen und Böen klar getrennt sind
+    const rideShare = (Math.floor(state.rideHours) - RIDE_MIN) / span;
+    const band = `<div class="ride-band" aria-hidden="true" style="--share:${rideShare}"></div>`;
+    details = `<div class="tl-section">${band}<div class="timeline-row times">${timeRow}</div></div>
+      <div class="tl-head" style="color:var(--rain)">${icon("drop", 15, "currentColor", 2.2)}${t("rainRow")}</div>
+      <div class="tl-section">${band}<div class="timeline-row rain">${rainRow}</div></div>
+      <div class="tl-head" style="color:var(--wind)">${icon("wind", 15, "currentColor", 2.2)}${t("gustRow")}</div>
+      <div class="tl-section">${band}<div class="timeline-row gusts">${gustRow}</div></div>`;
   }
 
   document.getElementById("ride-dynamic").innerHTML = `<div class="hints">${hints.join("")}</div>
@@ -470,6 +483,10 @@ function updateRide() {
 
   renderOutfit(check);
 }
+
+// Balken im Verlauf: Höhe in px, und ab welcher Böe (km/h) der Wind-Balken voll ist
+const BAR_HEIGHT = 36;
+const GUST_BAR_FULL = 60;
 
 // Name einer Schicht: Kleiderschrank-Teil oder allgemeine Schicht ("Warme Schicht")
 function layerName(l) {

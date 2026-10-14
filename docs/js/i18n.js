@@ -63,8 +63,8 @@ const TEXTS = {
     windSub: (g) => `Böen bis ${g} km/h`,
     calm: (time, windy) => `Bis ${time}: trocken · ${windy ? "etwas Wind" : "kaum Wind"}`,
     calmNow: (windy) => `Gerade trocken · ${windy ? "etwas Wind" : "kaum Wind"}`,
-    rainRow: "Regen %",
-    gustRow: "Böen km/h",
+    rainRow: "Regenwahrscheinlichkeit %",
+    gustRow: "Böen in km/h",
     showDetails: "Regen & Wind im Verlauf",
     hideDetails: "Weniger anzeigen",
 
@@ -211,8 +211,8 @@ const TEXTS = {
     windSub: (g) => `Gusts up to ${g} km/h`,
     calm: (time, windy) => `Until ${time}: dry · ${windy ? "a little wind" : "hardly any wind"}`,
     calmNow: (windy) => `Dry right now · ${windy ? "a little wind" : "hardly any wind"}`,
-    rainRow: "Rain %",
-    gustRow: "Gusts km/h",
+    rainRow: "Chance of rain %",
+    gustRow: "Gusts in km/h",
     showDetails: "Rain & wind by the hour",
     hideDetails: "Show less",
 

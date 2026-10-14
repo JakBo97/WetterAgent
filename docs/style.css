@@ -236,17 +236,38 @@ input[type=range]:focus-visible { outline: 2px solid var(--text); outline-offset
 .wind-bars i.on { background: var(--wind); }
 
 .timeline { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--card-border); }
-.timeline-row { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 2px; }
-.cell { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+/* Überschrift je Zeile mit Symbol, zwischen den Abschnitten */
+.tl-head { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 12px; font-weight: 700; letter-spacing: 0.04em; }
+.tl-section { position: relative; padding: 6px 0; }
+/* Fahrt-Fenster hinter den Spalten der Fahrt, gleiche Teilung wie der Regler (14 px Rand, halbe Spaltenbreite + Luft) */
+.ride-band {
+  position: absolute; top: 0; bottom: 0; pointer-events: none;
+  left: -5px; width: calc((100% - 28px) * var(--share) + 38px);
+  background: rgba(255, 138, 61, 0.07); border: 1px solid rgba(255, 138, 61, 0.3); border-radius: 12px;
+}
+/* Verlauf-Spalten sitzen wie die Striche des Reglers: 14 px Rand, dann gleichmäßig verteilt */
+.timeline-row { position: relative; margin: 0 14px; }
+.timeline-row.times { height: 15px; }
+.timeline-row.rain { height: 66px; }
+.timeline-row.gusts { height: 66px; }
+.cell { position: absolute; top: 0; width: 34px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 4px; }
 .cell.off { opacity: 0.3; }
+.cell.off .gust.strong { opacity: 0.6; }
 .cell-time { font-size: 11px; color: var(--muted); }
-.row-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 700; margin-top: 6px; }
-.rain-bar { height: 28px; width: 8px; border-radius: 4px; background: #24282E; display: flex; align-items: flex-end; overflow: hidden; }
-.rain-bar i { display: block; width: 8px; border-radius: 4px; background: var(--rain); }
-.rain-value { font-size: 12px; color: var(--muted); }
-.rain-value.high { color: var(--rain); }
-.gust { font-size: 13px; font-weight: 500; color: var(--muted); padding: 3px 0; width: 100%; text-align: center; border-radius: 6px; }
-.gust.strong { background: var(--wind); color: var(--bg); font-weight: 700; }
+/* Balken für Regen (blau) und Böen (lila), von unten gefüllt */
+.bar { height: 36px; width: 12px; border-radius: 6px; background: #2A2E35; display: flex; align-items: flex-end; overflow: hidden; }
+.bar i { display: block; width: 12px; border-radius: 6px; }
+.bar.rain i { background: var(--rain); }
+.bar.wind i { background: var(--wind); }
+/* Regenwert im Kästchen wie die Böen - in der Fahrt immer blau umrandet, auch bei 0 */
+.rain-value { font-size: 14px; font-weight: 600; color: var(--muted); padding: 4px 0; width: 100%; text-align: center; border-radius: 7px; background: #22262C; }
+.gust { font-size: 14px; font-weight: 600; color: var(--muted); padding: 4px 0; width: 100%; text-align: center; border-radius: 7px; background: #22262C; }
+/* Spalten innerhalb der Fahrt: hell und farbig */
+.cell:not(.off) .cell-time { color: var(--text); font-weight: 600; }
+.cell:not(.off) .rain-value { color: var(--rain); background: var(--rain-bg); box-shadow: inset 0 0 0 1px rgba(110, 195, 245, 0.6); }
+.cell:not(.off) .gust { color: var(--wind); background: var(--wind-bg); box-shadow: inset 0 0 0 1px var(--wind-border); }
+.rain-value.high, .cell:not(.off) .rain-value.high { color: var(--rain); font-weight: 700; }
+.gust.strong, .cell:not(.off) .gust.strong { background: var(--wind); color: var(--bg); font-weight: 700; box-shadow: none; }
 
 .details-toggle {
   min-height: 46px; margin: 12px -16px 0; padding: 0 16px;

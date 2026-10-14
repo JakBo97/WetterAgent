@@ -283,6 +283,21 @@ export function analyzeRide(current, hours, now, rideHours) {
 
   const rideList = timeline.filter((point) => point.inRide);
 
+  // Spalten für "Regen & Wind im Verlauf": genau unter den vollen Stunden des Reglers
+  // (jetzt, +1 h ... +8 h). Regen % aus der Stunde, in die der Zeitpunkt fällt, Böen anteilig.
+  const columns = [];
+  for (let offset = 0; offset <= TIMELINE_HOURS; offset++) {
+    const time = new Date(now.getTime() + offset * 60 * 60 * 1000);
+    const slot = hours.find((hour) => hour.time >= time);
+    columns.push({
+      time,
+      offset,
+      rainProbability: slot ? slot.rainProbability : 0,
+      gusts: weatherAt(current, hours, now, time).windGusts,
+      inRide: offset <= rideHours,
+    });
+  }
+
   // Ende der Fahrt (auch zwischen zwei vollen Stunden) - das zeigt die große Zahl oben
   const endWeather = weatherAt(current, hours, now, rideEnd);
   const endMoment = analyzeMoment(endWeather, rideEnd, rideHours === 0);
@@ -292,15 +307,18 @@ export function analyzeRide(current, hours, now, rideHours) {
   const change = temperatures[temperatures.length - 1] - temperatures[0];
   const coldest = Math.min(...temperatures);
 
-  // Regen
-  const maxRain = Math.max(0, ...rideList.map((p) => p.rainProbability));
-  const heavy = rideList.find((p) => p.rainProbability >= RAIN_PROB_HIGH);
+  // Regen: alle Stunden, die die Fahrt berühren - auch die angefangene letzte (Open-Meteo gibt
+  // die Regenwahrscheinlichkeit für die Stunde davor an). So passt der Hinweis zu den Verlauf-Spalten.
+  const rainSlots = hours.filter((hour) => hour.time > now && hour.time - 60 * 60 * 1000 < rideEnd)
+    .map((hour) => ({ start: new Date(hour.time - 60 * 60 * 1000), rainProbability: hour.rainProbability }));
+  const maxRain = Math.max(0, ...rainSlots.map((p) => p.rainProbability));
+  const heavy = rainSlots.find((p) => p.rainProbability >= RAIN_PROB_HIGH);
   // Die Logik liefert nur Fakten - die Texte (Deutsch/Englisch) baut die Anzeige
   let rain = null;
   if (current.precipitation > 0) {
     rain = { kind: "now" };
   } else if (heavy) {
-    rain = { kind: "from", hour: heavy.time.getHours(), probability: heavy.rainProbability };
+    rain = { kind: "from", hour: heavy.start.getHours(), probability: maxRain };
   } else if (maxRain >= RAIN_PROB_MODERATE) {
     rain = { kind: "possible", probability: maxRain };
   }
@@ -325,12 +343,13 @@ export function analyzeRide(current, hours, now, rideHours) {
     rideHours,
     end: rideEnd,
     endMoment,
+    columns,
     timeline,
     coldest,
     change,
     rain,
     rainExpected: current.precipitation > 0 || maxRain >= RAIN_PROB_MODERATE,
-    rainSoonestHour: heavy ? heavy.time.getHours() : null,
+    rainSoonestHour: heavy ? heavy.start.getHours() : null,
     wind,
     windLevel,
     iceLater: iceLater ? iceLater.time : null,
