@@ -107,22 +107,33 @@ Wenn sich Regeln in `logic.js` ändern, sag Bescheid, ob `main.py` nachgezogen w
 - **Wärmestufen** der Kleidung: 1 leicht, 2 warm, 3 winterfest (0 = Regen).
 - **Glätte** (Schätzung): Boden ≤ 1 °C **und** (Regen in den letzten 3 h **oder** Luft nahe Taupunkt).
   Glätte "jetzt" steht im Jetzt-Block, Glätte "später" im Fahrt-Block, nie doppelt.
-- **Fahrtdauer-Regler**: 1 bis 8 Stunden in halben Stunden, Standard 1 Stunde. Startzeit ist immer "jetzt".
-- **Verlauf** zeigt immer die nächsten 8 Stunden; Stunden außerhalb der Fahrt sind abgeblendet.
+- **Fahrtdauer-Regler**: 0 ("Jetzt", live) bis 8 Stunden in halben Stunden, Standard 0. Startzeit ist
+  immer "jetzt". Der Regler steuert die große Zahl oben: Sie zeigt die Fahrtemperatur am **Ende** der
+  eingestellten Fahrt (`ride.endMoment` bzw. `check.moment`). Zwischen zwei vollen Stunden rechnet
+  `weatherAt` Temperatur und Wind anteilig, Regen und Sonne aus der Stunde, in die der Zeitpunkt fällt.
+  Dieser Endpunkt zählt auch für den kältesten Moment der Fahrt.
+- **Einordnung** (`FEEL_BANDS`) fürs Motorradfahren in 4 Bereichen: Kalt < 8 · Kühl < 16 · Angenehm < 26 ·
+  Heiß ab 26 (Fahrtemperatur).
+- **Verlauf** (aufklappbar "Regen & Wind im Verlauf") zeigt immer die nächsten 8 Stunden mit Uhrzeit,
+  Regen % und Böen; Stunden außerhalb der Fahrt sind abgeblendet. Die Temperatur steht dort nicht mehr,
+  sie steht oben in der großen Anzeige.
 - Schwellenwerte stehen als Konstanten oben in `logic.js`, nicht verstreut im Code.
 
 ## Design-Entscheidungen (bitte beibehalten)
 
 Startseite mit genau **drei Blöcken**:
 
-1. **JETZT** (späteres iPhone-Widget): große Fahrtemperatur, Tacho von sehr kalt bis heiß mit
-   Zeiger, Einordnung als Wort, rundes Feld mit Außentemperatur, "JETZT"-Abzeichen mit
-   **rotem pulsierendem Live-Punkt**. Kachel ist in der Temperaturfarbe getönt, Hintergrund
-   zeigt eine **Bergkette mit Straße** (bei Frost Schneeflocken, bei Regen Regenstriche, bei Hitze Sonne).
-   Nur Glätte "jetzt" erscheint hier als Warnung.
-2. **DEINE FAHRT**: Regler mit Strichen pro halber Stunde, darunter Hinweise (Glätte später,
-   Regen blau, Wind lila, sonst grüner Haken "trocken"), Stundenverlauf mit Temperaturfarben,
-   aufklappbar Regen % und Böen.
+1. **JETZT** (späteres iPhone-Widget): große Fahrtemperatur, Tacho mit 4 Bereichen (kalt, kühl,
+   angenehm, heiß) von 0 °C (darunter ganz links) bis 35 °C (voll ausgeschlagen) mit Zeiger,
+   Einordnung als Wort, rundes Feld mit Außentemperatur. Zeit-Abzeichen in der Temperaturfarbe (gefüllt, gleiche Form
+   in beiden Fällen): Regler auf 0 → "**● 20:59** jetzt" mit **rotem pulsierendem Live-Punkt**; sonst
+   "Uhr-Symbol **22:53** in 2 h" für den eingestellten Zeitpunkt, und Zahl, Tacho, Außentemperatur und
+   Farbe wandern mit. Kachel ist in der Temperaturfarbe getönt, Hintergrund
+   zeigt eine **Bergkette mit Straße** (bei Frost Schneeflocken, bei Regen Regenstriche, bei "angenehm" eine gelbe Sonne, bei "heiß"
+   eine große orange Sonne mit flimmernder Luft).
+   Nur Glätte "jetzt" erscheint hier als Warnung (immer, weil die Fahrt jetzt losgeht).
+2. **DEINE FAHRT**: Regler mit Strichen pro halber Stunde (links "Jetzt"), darunter Hinweise (Glätte
+   später, Regen blau, Wind lila, sonst grüner Haken "trocken"), aufklappbar Uhrzeiten, Regen % und Böen.
 3. **ANZIEHEN**: 2×2+2 Kacheln (Kopf, Oberkörper, Hände, Unterkörper, Schuhe, Regen).
    Kachel zeigt das äußerste Teil, "+N Schichten darunter", Farbstreifen pro Schicht.
    Oberkörper: groß die Jacke (oder "Nur T-Shirt"), darunter "+ 1 warme Schicht" / "+ 2 Schichten";
@@ -134,7 +145,7 @@ Startseite mit genau **drei Blöcken**:
 
 Weitere Festlegungen:
 - Dunkles Design, Schriften Barlow / Barlow Condensed.
-- Markenfarbe Race-Orange `#FF8A3D`. Temperaturfarben: eisblau → blau → türkis → grün → gelb → orange.
+- Markenfarbe Race-Orange `#FF8A3D`. Temperaturfarben: eisblau (kalt) → türkis (kühl) → grün (angenehm) → orange (heiß).
 - Regen immer blau, Wind immer lila, Glätte orange-gelb.
 - Einstellungen: Sprache (EN/DE, Standard Englisch; Deutsch wählt man aktiv), Standort (GPS an/aus + Ortssuche), Kälteempfinden mit
   Live-Beispiel bei aktueller Fahrtemperatur (Oberkörper: Jacke + Schichten, mit einer Textiljacke,
@@ -151,8 +162,10 @@ Weitere Festlegungen:
 - Lokal: im Ordner `docs` `python -m http.server` ausführen, dann http://localhost:8000 öffnen.
   (Die `index.html` per Doppelklick zu öffnen funktioniert wegen der JS-Module nicht.)
 - **Testmodus**: `?test` an die Adresse hängen (z. B. http://localhost:8000/?test). Dann erscheint über der
-  Startseite eine Leiste "Live | 25° | 15° | 5°", die die Lufttemperatur festlegt (`TEST_TEMPERATURES`
-  in `app.js`); alles andere bleibt echtes Wetter. Ohne `?test` ist die Leiste unsichtbar.
+  Startseite eine Leiste "Live | 25° | 15° | 5°", die die Lufttemperatur **jetzt** festlegt
+  (`TEST_TEMPERATURES` in `app.js`). Der echte Temperaturverlauf wird dabei nur verschoben (wird es real
+  4 °C kälter, auch im Test), damit sich die Anzeige beim Bewegen des Reglers ändert; alles andere bleibt
+  echtes Wetter. Ohne `?test` ist die Leiste unsichtbar.
 - **Cache-Busting**: Alle Dateiverweise tragen eine Versionsnummer (z. B. `?v=1`): in `index.html`
   (`style.css`, `js/app.js`) und bei den `import`s oben in `js/app.js`. Pro Commit, der
   `docs/` ändert, die Nummer **einmal und überall gleich** um 1 erhöhen, sonst lädt das iPhone die alte Version.

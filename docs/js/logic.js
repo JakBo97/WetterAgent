@@ -30,13 +30,11 @@ const ICE_DEW_POINT_GAP = 1.5;
 const ICE_WET_HOURS = 3;
 const TREND_CHANGE = 3;
 
-// Einordnung der Fahrtemperatur: unter diesem Wert -> Bezeichnung
+// Einordnung der Fahrtemperatur fürs Motorradfahren: unter diesem Wert -> Bezeichnung
 export const FEEL_BANDS = [
-  { limit: 5, label: "Sehr kalt", color: "#8FB8FF" },
-  { limit: 12, label: "Kalt", color: "#62C1F5" },
-  { limit: 18, label: "Kühl", color: "#5FD4C0" },
-  { limit: 25, label: "Angenehm", color: "#9FDB6B" },
-  { limit: 30, label: "Warm", color: "#FFC94A" },
+  { limit: 8, label: "Kalt", color: "#8FB8FF" },
+  { limit: 16, label: "Kühl", color: "#5FD4C0" },
+  { limit: 26, label: "Angenehm", color: "#9FDB6B" },
   { limit: Infinity, label: "Heiß", color: "#FF7A45" },
 ];
 
@@ -231,6 +229,38 @@ export function analyzeNow(current, hours, now) {
 // Block 2: DEINE FAHRT
 // ---------------------------------------------------------------------
 
+// Wetter zu einem beliebigen Zeitpunkt (z. B. "in 1,5 Stunden"):
+// Temperatur und Wind zwischen den Stundenwerten gleichmäßig verteilt, Regen und Sonne aus der
+// Stunde, in die der Zeitpunkt fällt (Open-Meteo gibt sie für die Stunde davor an).
+export function weatherAt(current, hours, now, time) {
+  if (time <= now) return current;
+  const points = [{ ...current, time: now }, ...hours.filter((hour) => hour.time > now)];
+  for (let i = 0; i < points.length - 1; i++) {
+    const a = points[i];
+    const b = points[i + 1];
+    if (time <= b.time) {
+      const share = (time - a.time) / (b.time - a.time);
+      const mix = (key) => (a[key] ?? 0) + ((b[key] ?? 0) - (a[key] ?? 0)) * share;
+      return { ...b, time, temperature: mix("temperature"), windSpeed: mix("windSpeed"), windGusts: mix("windGusts") };
+    }
+  }
+  return points[points.length - 1];
+}
+
+// Ein Zeitpunkt für die große Anzeige oben: live (jetzt) oder später
+function analyzeMoment(weather, time, live) {
+  const breakdown = getRidingBreakdown(weather);
+  return {
+    time,
+    live,
+    ridingTemperature: breakdown.riding,
+    breakdown,
+    airTemperature: weather.temperature,
+    precipitation: weather.precipitation,
+    band: getFeelBand(breakdown.riding),
+  };
+}
+
 export function analyzeRide(current, hours, now, rideHours) {
   const rideEnd = new Date(now.getTime() + rideHours * 60 * 60 * 1000);
   const firstHour = new Date(startOfHour(now).getTime() + 60 * 60 * 1000);
@@ -253,8 +283,12 @@ export function analyzeRide(current, hours, now, rideHours) {
 
   const rideList = timeline.filter((point) => point.inRide);
 
+  // Ende der Fahrt (auch zwischen zwei vollen Stunden) - das zeigt die große Zahl oben
+  const endWeather = weatherAt(current, hours, now, rideEnd);
+  const endMoment = analyzeMoment(endWeather, rideEnd, rideHours === 0);
+
   const temperatures = [getRidingTemperature(current),
-    ...rideList.map((p) => p.ridingTemperature)];
+    ...rideList.map((p) => p.ridingTemperature), endMoment.ridingTemperature];
   const change = temperatures[temperatures.length - 1] - temperatures[0];
   const coldest = Math.min(...temperatures);
 
@@ -290,6 +324,7 @@ export function analyzeRide(current, hours, now, rideHours) {
   return {
     rideHours,
     end: rideEnd,
+    endMoment,
     timeline,
     coldest,
     change,
@@ -494,8 +529,11 @@ export function buildQuickCheck(current, hours, now, rideHours, prefs) {
   // Ist es jetzt schon glatt, steht die Warnung oben - nicht doppelt im Fahrt-Block
   if (nowBlock.ice) ride.iceLater = null;
 
+  // Die große Anzeige oben zeigt den Zeitpunkt, den der Regler einstellt (0 = live)
+  const moment = ride.endMoment;
+
   const outfit = recommendOutfit(ride.coldest, {
     ...prefs, rainExpected: ride.rainExpected, strongGusts: ride.wind !== null, change: ride.change,
   });
-  return { now: nowBlock, ride, outfit };
+  return { now: nowBlock, moment, ride, outfit };
 }

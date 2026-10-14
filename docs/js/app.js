@@ -4,12 +4,12 @@
 // =====================================================================
 
 // Versionsnummer (?v=...) gleich halten wie in index.html (Cache-Busting).
-import { fetchWeather, parseCurrent, parseHourly, getGpsPosition, getPlaceName, searchPlaces } from "./data.js?v=8";
+import { fetchWeather, parseCurrent, parseHourly, getGpsPosition, getPlaceName, searchPlaces } from "./data.js?v=9";
 import {
-  buildQuickCheck, getRidingTemperature, getFeelBand, clothingTemperature, recommendTorso, chooseKombi,
+  buildQuickCheck, getRidingTemperature, clothingTemperature, recommendTorso, chooseKombi,
   FEEL_BANDS, CATALOG, ZONES, RAIN_GEAR, GUSTS_STRONG,
-} from "./logic.js?v=8";
-import { t, itemName, setLanguage, LANGUAGES } from "./i18n.js?v=8";
+} from "./logic.js?v=9";
+import { t, itemName, setLanguage, LANGUAGES } from "./i18n.js?v=9";
 
 // ---------------------------------------------------------------------
 // Einstellungen (im Speicher des Handys)
@@ -18,9 +18,9 @@ import { t, itemName, setLanguage, LANGUAGES } from "./i18n.js?v=8";
 const STORAGE_KEY = "motoweather.settings.v1";
 const REFRESH_AFTER_MS = 10 * 60 * 1000; // nach 10 Minuten neu laden
 
-const RIDE_MIN = 1;
+const RIDE_MIN = 0;     // 0 = jetzt (live)
 const RIDE_MAX = 8;
-const RIDE_DEFAULT = 1;
+const RIDE_DEFAULT = 0;
 
 const DEFAULT_SETTINGS = {
   onboarded: false,
@@ -126,6 +126,7 @@ const ICONS = {
   drop: '<path d="M12 3.5c3 4 5.5 7 5.5 10a5.5 5.5 0 0 1-11 0c0-3 2.5-6 5.5-10z"></path>',
   warning: '<path d="M12 3l9.5 17h-19z"></path><line x1="12" y1="10" x2="12" y2="14"></line><line x1="12" y1="17" x2="12" y2="17.01"></line>',
   check: '<path d="M5 12.5l4.5 4.5L19 7.5"></path>',
+  clock: '<circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3.5 2"></path>',
   chevronDown: '<path d="M6 9l6 6 6-6"></path>',
   chevronLeft: '<path d="M15 6l-6 6 6 6"></path>',
   info: '<circle cx="12" cy="12" r="9"></circle><line x1="12" y1="11" x2="12" y2="16.5"></line><line x1="12" y1="7.6" x2="12" y2="7.61"></line>',
@@ -191,12 +192,17 @@ async function loadWeather() {
 const TEST_MODE = new URLSearchParams(location.search).has("test");
 const TEST_TEMPERATURES = [25, 15, 5];
 
-// Das Wetter, mit dem die App rechnet: echt oder mit der Test-Temperatur
+// Das Wetter, mit dem die App rechnet: echt oder mit der Test-Temperatur.
+// Der echte Verlauf wird dabei nur verschoben: "jetzt" = Test-Temperatur, wird es später real 4 °C
+// kälter, ist es auch im Test 4 °C kälter. So ändert sich die Anzeige beim Bewegen des Reglers.
 function shownWeather() {
   const { current, hours } = state.weather;
-  const temperature = state.testTemperature;
-  if (temperature === null) return { current, hours };
-  return { current: { ...current, temperature }, hours: hours.map((hour) => ({ ...hour, temperature })) };
+  if (state.testTemperature === null) return { current, hours };
+  const shift = state.testTemperature - current.temperature;
+  return {
+    current: { ...current, temperature: state.testTemperature },
+    hours: hours.map((hour) => ({ ...hour, temperature: hour.temperature + shift })),
+  };
 }
 
 function renderTestBar() {
@@ -230,7 +236,7 @@ function renderHome() {
       <button class="secondary-button" data-action="open-settings">${t("setLocation")}</button>
     </section>`;
   } else if (weather) {
-    body = (TEST_MODE ? renderTestBar() : "") + renderHero(currentCheck()) + renderRideShell() + `<section class="card" id="outfit"></section>`;
+    body = (TEST_MODE ? renderTestBar() : "") + `<div id="hero"></div>` + renderRideShell() + `<section class="card" id="outfit"></section>`;
   }
 
   const updated = weather
@@ -251,13 +257,17 @@ function renderHome() {
   if (weather) updateRide();
 }
 
+// Tacho fürs Motorradfahren: unter 0 ° ganz links, ab 35 ° voll ausgeschlagen
+const GAUGE_MIN = 0;
+const GAUGE_MAX = 35;
+
 function renderGauge(ridingTemperature, bandIndex) {
-  const tMin = -10;
-  const tMax = 35;
+  const tMin = GAUGE_MIN;
+  const tMax = GAUGE_MAX;
   const angle = (temp) => Math.PI * (1 - (Math.max(tMin, Math.min(tMax, temp)) - tMin) / (tMax - tMin));
   const point = (a, r) => [75 + r * Math.cos(a), 80 - r * Math.sin(a)];
   const f = (n) => Math.round(n * 10) / 10;
-  const bounds = [-10, 5, 12, 18, 25, 30, 35];
+  const bounds = [GAUGE_MIN, ...FEEL_BANDS.slice(0, -1).map((band) => band.limit), GAUGE_MAX];
 
   let arcs = "";
   FEEL_BANDS.forEach((band, i) => {
@@ -276,9 +286,9 @@ function renderGauge(ridingTemperature, bandIndex) {
   </svg>`;
 }
 
+// Hintergrund und Rand der Jetzt-Kachel je Temperaturbereich (kalt, kühl, angenehm, heiß)
 const HERO_COLORS = [
-  ["#141D2A", "#2A3D57"], ["#12212B", "#24475C"], ["#122422", "#24504A"],
-  ["#17221A", "#34502C"], ["#262013", "#5A4A1F"], ["#28180F", "#5E3220"],
+  ["#141D2A", "#2A3D57"], ["#122422", "#24504A"], ["#17221A", "#34502C"], ["#28180F", "#5E3220"],
 ];
 
 // Hintergrund der Jetzt-Kachel: Bergkette, davor Hügel - plus je nach Wetter Straße, Schnee, Regen oder Sonne
@@ -297,9 +307,24 @@ function renderScene(kind) {
     extra = spots.map(([x, y, s]) => `<path transform="translate(${x} ${y}) scale(${s})" d="${flake}" stroke="#CFE3FF" stroke-width="1.6" opacity="0.35"></path>`).join("");
   } else if (kind === "rain") {
     extra = `<path d="M200 20l-8 18M240 40l-8 18M280 16l-8 18M320 46l-8 18M220 90l-8 18M262 110l-8 18M304 84l-8 18M346 112l-8 18M190 160l-8 18M236 180l-8 18M282 156l-8 18M328 190l-8 18" stroke="#6EC3F5" stroke-width="2" opacity="0.35"></path>`;
-  } else if (kind === "sun") {
-    extra = `<circle cx="214" cy="40" r="18" stroke="${color}" stroke-width="2" opacity="0.35"></circle>
-      <path d="M214 12v-8M214 68v8M186 40h-8M242 40h8M194 20l-6-6M234 60l6 6M234 20l6-6M194 60l-6 6" stroke="${color}" stroke-width="2" opacity="0.35"></path>`;
+  } else if (kind === "sun" || kind === "heat") {
+    // Sonne mit Strahlen; bei Hitze größer, kräftiger und mit flimmernder Luft über den Hügeln
+    const hot = kind === "heat";
+    const sunColor = hot ? "#FF8A3D" : "#FFC94A";
+    const r = hot ? 24 : 17;
+    const rays = Array.from({ length: hot ? 12 : 8 }, (_, i) => {
+      const a = (i / (hot ? 12 : 8)) * Math.PI * 2;
+      const p = (d) => [Math.round((214 + Math.cos(a) * d) * 10) / 10, Math.round((44 + Math.sin(a) * d) * 10) / 10];
+      const [x1, y1] = p(r + 7);
+      const [x2, y2] = p(r + (hot ? 17 : 13));
+      return `M${x1} ${y1}L${x2} ${y2}`;
+    }).join("");
+    extra = `<circle cx="214" cy="44" r="${r}" fill="${sunColor}" fill-opacity="${hot ? 0.22 : 0.14}" stroke="${sunColor}" stroke-width="2" opacity="${hot ? 0.7 : 0.55}"></circle>
+      <path d="${rays}" stroke="${sunColor}" stroke-width="2.2" opacity="${hot ? 0.6 : 0.45}"></path>`;
+    if (hot) {
+      const wave = (x, y) => `M${x} ${y}q6 -6 12 0t12 0t12 0`;
+      extra += `<path d="${wave(30, 120)}${wave(118, 104)}${wave(60, 150)}${wave(250, 130)}${wave(170, 140)}" stroke="#FF8A3D" stroke-width="2" opacity="0.32"></path>`;
+    }
   }
 
   // Straße, die zwischen den Bergen verschwindet
@@ -319,16 +344,24 @@ function renderScene(kind) {
   </svg>`;
 }
 
+// Die Kachel zeigt den Zeitpunkt, den der Regler einstellt: live (Regler auf 0) oder z. B. "um 23:07".
+// Glätte "jetzt" bleibt immer hier oben, weil die Fahrt jetzt losgeht.
 function renderHero(check) {
   const now = check.now;
-  const bandIndex = FEEL_BANDS.indexOf(now.band);
+  const moment = check.moment;
+  const bandIndex = FEEL_BANDS.indexOf(moment.band);
   const [bg, border] = HERO_COLORS[bandIndex];
-  document.documentElement.style.setProperty("--accent", now.band.color);
+  document.documentElement.style.setProperty("--accent", moment.band.color);
 
   let scene = "road";
-  if (now.ice || now.ridingTemperature < 3) scene = "frost";
-  else if (state.weather.current.precipitation > 0) scene = "rain";
-  else if (now.ridingTemperature >= 25) scene = "sun";
+  if ((moment.live && now.ice) || moment.ridingTemperature < 3) scene = "frost";
+  else if (moment.precipitation > 0) scene = "rain";
+  else if (moment.band === FEEL_BANDS[FEEL_BANDS.length - 1]) scene = "heat";
+  else if (moment.band === FEEL_BANDS[FEEL_BANDS.length - 2]) scene = "sun";
+
+  const badge = moment.live
+    ? `<span class="time-badge"><span class="live-dot" aria-hidden="true"></span><strong>${clock(moment.time)}</strong><span>${t("nowLower")}</span></span>`
+    : `<span class="time-badge">${icon("clock", 16, "currentColor", 2.4)}<strong>${clock(moment.time)}</strong><span>${t("inHours", formatHours(state.rideHours))}</span></span>`;
 
   const ice = now.ice ? `<div class="ice-banner">${icon("warning", 24, "#1A1408", 2)}
     <div><strong>${t("iceTitle")}</strong><span>${now.iceUntil ? t("iceUntil", t("atHour", now.iceUntil.getHours())) : t("iceNow")} – ${t("iceText")}</span></div></div>` : "";
@@ -337,14 +370,14 @@ function renderHero(check) {
     ${renderScene(scene)}
     <div class="hero-top">
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-        <span class="now-badge"><span class="live-dot" aria-hidden="true"></span>${t("now")}</span><span class="hero-caption">${t("feltOnBike")}</span>
+        ${badge}<span class="hero-caption">${t("feltOnBike")}</span>
         <button class="info-button" data-action="open-info" aria-label="${t("infoButton")}">${icon("info", 18, "currentColor", 2)}</button>
       </div>
-      <div class="air-badge"><small>${t("outside")}</small><strong>${deg(now.airTemperature)}°</strong></div>
+      <div class="air-badge"><small>${t("outside")}</small><strong>${deg(moment.airTemperature)}°</strong></div>
     </div>
     <div class="hero-main">
-      <div class="big-temp">${deg(now.ridingTemperature)}°</div>
-      <div class="gauge-wrap">${renderGauge(now.ridingTemperature, bandIndex)}<div class="feel-label">${t("bands")[bandIndex]}</div></div>
+      <div class="big-temp">${deg(moment.ridingTemperature)}°</div>
+      <div class="gauge-wrap">${renderGauge(moment.ridingTemperature, bandIndex)}<div class="feel-label">${t("bands")[bandIndex]}</div></div>
     </div>
     ${ice}
   </section>`;
@@ -352,7 +385,7 @@ function renderHero(check) {
 
 const SLIDER_STEPS = [];
 for (let v = RIDE_MIN; v <= RIDE_MAX; v += 0.5) SLIDER_STEPS.push(v);
-const SLIDER_LABELS = [1, 2, 4, 6, 8];
+const SLIDER_LABELS = [0, 2, 4, 6, 8];
 
 function renderRideShell() {
   const position = (v) => ((v - RIDE_MIN) / (RIDE_MAX - RIDE_MIN)) * 100;
@@ -366,7 +399,7 @@ function renderRideShell() {
     </div>
     <input id="ride-hours" type="range" min="${RIDE_MIN}" max="${RIDE_MAX}" step="0.5" value="${state.rideHours}">
     <div class="ticks" aria-hidden="true">${SLIDER_STEPS.map((v) => `<span data-v="${v}" class="${v % 1 === 0 ? "full" : ""}"></span>`).join("")}</div>
-    <div class="tick-labels" aria-hidden="true">${SLIDER_LABELS.map((v) => `<span data-v="${v}" style="left:${position(v)}%">${v} h</span>`).join("")}</div>
+    <div class="tick-labels" aria-hidden="true">${SLIDER_LABELS.map((v) => `<span data-v="${v}" style="left:${position(v)}%">${v === 0 ? t("nowShort") : `${v} h`}</span>`).join("")}</div>
     <div id="ride-dynamic"></div>
     <button class="details-toggle" data-action="toggle-details" aria-expanded="${state.showDetails}">
       <span>${state.showDetails ? t("hideDetails") : t("showDetails")}</span>${icon("chevronDown", 16, "currentColor", 2.2)}
@@ -390,9 +423,11 @@ function updateRide() {
   const check = currentCheck();
   const ride = check.ride;
 
-  document.getElementById("hours-text").textContent = formatHours(state.rideHours);
-  document.getElementById("end-text").textContent = t("until", clock(ride.end));
-  document.getElementById("ride-hours").setAttribute("aria-valuetext", formatHours(state.rideHours));
+  const live = state.rideHours === 0;
+  document.getElementById("hero").innerHTML = renderHero(check);
+  document.getElementById("hours-text").textContent = live ? t("nowShort") : formatHours(state.rideHours);
+  document.getElementById("end-text").textContent = live ? "" : t("until", clock(ride.end));
+  document.getElementById("ride-hours").setAttribute("aria-valuetext", live ? t("nowShort") : formatHours(state.rideHours));
   app.querySelectorAll(".ticks span, .tick-labels span").forEach((el) => {
     el.classList.toggle("on", Number(el.dataset.v) <= state.rideHours);
   });
@@ -412,33 +447,26 @@ function updateRide() {
     hints.push(`<div class="hint wind"><span class="wind-bars" aria-hidden="true">${bars}</span><div><strong>${title}</strong><span>${sub}</span></div></div>`);
   }
   if (!hints.length) {
-    hints.push(`<div class="calm">${icon("check", 18, "#9FDB6B", 2)}<span>${t("calm", clock(ride.end), ride.windLevel > 1)}</span></div>`);
+    const calmText = live ? t("calmNow", ride.windLevel > 1) : t("calm", clock(ride.end), ride.windLevel > 1);
+    hints.push(`<div class="calm">${icon("check", 18, "#9FDB6B", 2)}<span>${calmText}</span></div>`);
   }
 
-  // Verlauf
-  const coldestPoint = ride.timeline.filter((p) => p.inRide)
-    .reduce((min, p) => (!min || p.ridingTemperature < min.ridingTemperature ? p : min), null);
-
+  // Verlauf (aufklappbar): Uhrzeiten, Regen % und Böen - die Temperatur steht oben in der Jetzt-Kachel
   const cells = (inner) => ride.timeline.map((p) => `<div class="cell ${p.inRide ? "" : "off"}">${inner(p)}</div>`).join("");
-
-  const tempRow = cells((p) => {
-    const color = getFeelBand(p.ridingTemperature).color;
-    return `<div class="cell-time">${String(p.time.getHours()).padStart(2, "0")}:00</div>
-      <div class="cell-mark" style="background:${p.inRide ? color : "transparent"}"></div>
-      <div class="cell-temp" style="color:${color}${p === coldestPoint ? ";text-decoration:underline" : ""}">${deg(p.ridingTemperature)}°</div>`;
-  });
 
   let details = "";
   if (state.showDetails) {
+    const timeRow = cells((p) => `<div class="cell-time">${String(p.time.getHours()).padStart(2, "0")}:00</div>`);
     const rainRow = cells((p) => `<div class="rain-bar"><i style="height:${Math.round(p.rainProbability / 100 * 28)}px"></i></div>
       <div class="rain-value ${p.rainProbability >= 30 ? "high" : ""}">${p.rainProbability}</div>`);
     const gustRow = cells((p) => `<div class="gust ${p.gusts >= GUSTS_STRONG ? "strong" : ""}">${Math.round(p.gusts)}</div>`);
-    details = `<div class="row-title" style="color:var(--rain)">${t("rainRow")}</div><div class="timeline-row">${rainRow}</div>
+    details = `<div class="timeline-row">${timeRow}</div>
+      <div class="row-title" style="color:var(--rain)">${t("rainRow")}</div><div class="timeline-row">${rainRow}</div>
       <div class="row-title" style="color:var(--wind)">${t("gustRow")}</div><div class="timeline-row">${gustRow}</div>`;
   }
 
   document.getElementById("ride-dynamic").innerHTML = `<div class="hints">${hints.join("")}</div>
-    <div class="timeline"><div class="timeline-row">${tempRow}</div>${details}</div>`;
+    ${details ? `<div class="timeline">${details}</div>` : ""}`;
 
   renderOutfit(check);
 }
@@ -832,7 +860,7 @@ function formatDegrees(value, sign = false) {
 }
 
 function openInfo(trigger) {
-  const breakdown = currentCheck().now.breakdown;
+  const breakdown = currentCheck().moment.breakdown;
   const labels = t("breakdownRows");
   const row = (key, value, sign) => {
     const zero = Math.round(value * 10) / 10 === 0;
